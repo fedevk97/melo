@@ -42,7 +42,11 @@
         <service android:name=".playback.MeloPlaybackService"
             android:exported="true" android:foregroundServiceType="mediaPlayback">
             <intent-filter><action android:name="androidx.media3.session.MediaSessionService" /></intent-filter>
+            <intent-filter><action android:name="androidx.media3.session.MediaLibraryService" /></intent-filter>
+            <intent-filter><action android:name="android.media.browse.MediaBrowserService" /></intent-filter>
         </service>
+        <!-- Tells Android Auto this is a media app; it draws the screens, Melo only supplies the library. -->
+        <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <service android:name=".playback.MeloDownloadService"
             android:exported="false" android:foregroundServiceType="dataSync" />
         <meta-data android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"

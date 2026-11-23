@@ -21,8 +21,10 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
 import androidx.media3.exoplayer.drm.FrameworkMediaDrm
 import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
+import `in`.melo.playback.auto.AutoCallback
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -35,8 +37,8 @@ import `in`.melo.data.preferences.SettingsStore
 import `in`.melo.data.SpotifyHlsDataSource
 
 @UnstableApi
-class MeloPlaybackService : MediaSessionService() {
-    private var mediaSession: MediaSession? = null
+class MeloPlaybackService : MediaLibraryService() {
+    private var mediaSession: MediaLibrarySession? = null
     private var source: SpotifyHlsDataSource.Factory? = null
     private var nativeAudio: NativeAudioProvider? = null
     private var behavior: PlaybackBehavior? = null
@@ -212,12 +214,7 @@ class MeloPlaybackService : MediaSessionService() {
         }
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        mediaSession = MediaSession.Builder(this, player).setSessionActivity(intent)
-            .setCallback(object : MediaSession.Callback {
-                override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
-                    if (controller.packageName == packageName || controller.isTrusted) super.onConnect(session, controller)
-                    else MediaSession.ConnectionResult.reject()
-            }).build()
+        mediaSession = MediaLibrarySession.Builder(this, player, AutoCallback(this, effectsScope)).setSessionActivity(intent).build()
     }
     private fun updateNormalization(player: androidx.media3.common.Player) {
         val sink = normalizingSink ?: return
@@ -228,7 +225,7 @@ class MeloPlaybackService : MediaSessionService() {
         if (factor != sink.factor) android.util.Log.i("MeloAudio", "normalization enabled=$enabled gain=${gain?.let { "%.1f".format(it) }}dB volume=${"%.2f".format(factor)}")
         sink.factor = factor
     }
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
     override fun onTaskRemoved(rootIntent: Intent?) {
         val keepPlaying = SettingsStore.get(this).settings.value.keepPlayingInBackground
         if (!keepPlaying) mediaSession?.player?.pause()

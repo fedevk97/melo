@@ -456,7 +456,7 @@ internal fun playbackErrorMessage(code: Int): String = when (code) {
     PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED -> "Audio output could not start. Check the audio device, then try again."
     else -> "This track cannot be played. Try again or pick another track."
 }
-private fun Music.isPlayableTrack(): Boolean = kind == MusicKind.Track &&
+internal fun Music.isPlayableTrack(): Boolean = kind == MusicKind.Track &&
     (id.startsWith("spotify:track:") || id.startsWith(`in`.melo.data.youtube.YTM_TRACK_PREFIX) || (isLocalTrack && mediaUri != null))
 
 /** Set on the tracks the user queued ("Add to queue", "Play next"). */
@@ -464,7 +464,7 @@ private const val QUEUED = "queued"
 private fun MediaItem.isQueued(): Boolean = mediaMetadata.extras?.getBoolean(QUEUED) == true
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private fun mediaItem(track: Music, queued: Boolean = false): MediaItem {
+internal fun mediaItem(track: Music, queued: Boolean = false): MediaItem {
     // YouTube Music tracks, and Spotify tracks without a Spotify account, are read from YouTube Music.
     val youtube = YouTubeUris.of(track, `in`.melo.data.SpotifyAccount.signedIn)
     val spotify = youtube == null && !track.isLocalTrack

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auto_recent">Écoutés récemment</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_local">Sur cet appareil</string>
+</resources>
