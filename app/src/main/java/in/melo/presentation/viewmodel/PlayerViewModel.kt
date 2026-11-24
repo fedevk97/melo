@@ -322,7 +322,7 @@ class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
         .map { it.canRefreshRecommendations }
         .distinctUntilChanged()
         .stateIn(scope, SharingStarted.Eagerly, model.player.state.value.canRefreshRecommendations)
-    val isRefreshingRecommendations: StateFlow<Boolean> = model.radioRefreshInProgress
+    val isRefreshingRecommendations: StateFlow<Boolean> get() = model.radioRefreshInProgress
     fun refreshRecommendations() = model.refreshRadioRecommendations()
     fun nextSong() = if (casting) cast.next() else model.player.next()
     fun previousSong() = if (casting) cast.previous() else model.player.previous()

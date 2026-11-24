@@ -1,5 +1,11 @@
 # Changelog
 
+## Melo 1.2.3
+
+### Fixes
+
+- Fixed a crash when playing a song while you have local playlists saved.
+
 ## Melo 1.2.0
 
 ### Home

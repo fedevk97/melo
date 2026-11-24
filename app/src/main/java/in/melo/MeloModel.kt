@@ -727,6 +727,26 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         info.handle.ifBlank { info.name }
     }?.lowercase(Locale.ROOT) ?: if (YouTubeAccount.signedIn) "signed-in" else "anonymous"
 
+    /*
+     * Everything the start-up work below can reach is declared above it. Kotlin sets properties in
+     * the order they are written, and the coroutines `init` starts run at once on the main thread:
+     * one that reached a property written further down found it still null, and `ui`, built then
+     * for a saved local playlist, kept that null and crashed the player's queue.
+     */
+    private val requestedCovers = HashSet<String>()
+    private var coversRequested = 0
+    private var upNextJob: Job? = null
+    private var radioRefreshJob: Job? = null
+    private var radioAutoRefillJob: Job? = null
+    private var lastRadioAutoRefillTrackId: String? = null
+    private var radioAutoNoFreshSeedKey: String? = null
+    private val mutableRadioRefreshInProgress = MutableStateFlow(false)
+    val radioRefreshInProgress = mutableRadioRefreshInProgress.asStateFlow()
+    internal val spotifyPlaylists = SpotifyPlaylists(app)
+    private var lyrics: SpotifyLyricsSource? = null
+    private val mutableConversion = MutableStateFlow<`in`.melo.data.PlaylistConversion?>(null)
+    /** The conversion shown by the converter, kept while its screen is open. */
+    val conversion = mutableConversion.asStateFlow()
     init {
         if (mutableGuest.value) installLibrary(emptyLibrary(), false)
         viewModelScope.launch {
@@ -979,8 +999,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
                 )
             }
     }
-    private val requestedCovers = HashSet<String>()
-    private var coversRequested = 0
     private suspend fun fullDetail(source: SpotifyCatalog, item: Music, atLeast: Int = Int.MAX_VALUE, pageLimit: Int = MAX_DETAIL_PAGES): CatalogDetail {
         var detail = source.detail(item)
         var pages = 1
@@ -1868,13 +1886,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private var upNextJob: Job? = null
-    private var radioRefreshJob: Job? = null
-    private var radioAutoRefillJob: Job? = null
-    private var lastRadioAutoRefillTrackId: String? = null
-    private var radioAutoNoFreshSeedKey: String? = null
-    private val mutableRadioRefreshInProgress = MutableStateFlow(false)
-    val radioRefreshInProgress = mutableRadioRefreshInProgress.asStateFlow()
 
     /**
      * A track chosen on its own plays at once and its radio follows it, as in YouTube Music and Spotify,
@@ -2107,7 +2118,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         withContext(Dispatchers.IO) { store.saveDetail(item.id, fetched) }
         return fetched
     }
-    internal val spotifyPlaylists = SpotifyPlaylists(app)
     internal suspend fun createSpotifyPlaylist(name: String, tracks: List<Music>, published: Boolean): Music {
         val created = spotifyPlaylists.create(name, tracks, published)
         ui.register(created)
@@ -2186,7 +2196,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         val offline = spotifyAttribute(transport, session, "offline")
         return offline == null && spotifyAttribute(transport, session, "type") == "premium" || offline == "true" || offline == "1"
     }
-    private var lyrics: SpotifyLyricsSource? = null
     fun lyricsSource(): SpotifyLyricsSource? = lyrics
     fun showMessage(text: String) { mutableMessage.value = text }
     suspend fun tracksOf(item: Music): List<Music> { return when {
@@ -2667,9 +2676,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
 
     // Converter ----------------------------------------------------------------------------------
 
-    private val mutableConversion = MutableStateFlow<`in`.melo.data.PlaylistConversion?>(null)
-    /** The conversion shown by the converter, kept while its screen is open. */
-    val conversion = mutableConversion.asStateFlow()
 
     /** Kinds a playlist can be converted to now: Spotify needs its account, YouTube Music a Google account. */
     fun conversionTargets(source: Music): Map<`in`.melo.data.PlaylistKind, Boolean> {
