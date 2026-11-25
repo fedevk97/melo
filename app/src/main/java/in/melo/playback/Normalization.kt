@@ -61,6 +61,19 @@ internal class NormalizingAudioSink(sink: AudioSink) : ForwardingAudioSink(sink)
         apply()
     }
 
+    /** The PCM the decoder hands over, before Melo's own stages touch it. */
+    override fun configure(config: AudioSink.AudioSinkConfig) {
+        val inputFormat = config.format
+        AudioPipeline.update {
+            it.copy(
+                decodedEncoding = inputFormat.pcmEncoding.takeIf { e -> e != androidx.media3.common.Format.NO_VALUE },
+                decodedRateHz = inputFormat.sampleRate.takeIf { r -> r > 0 },
+                decodedChannels = inputFormat.channelCount.takeIf { c -> c > 0 },
+            )
+        }
+        super.configure(config)
+    }
+
     override fun handleBuffer(buffer: ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
         if (factor != applied) apply()
         return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)

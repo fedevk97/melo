@@ -202,6 +202,9 @@ class MultiServiceTest {
         val formats = audioFormats(response)
         assertEquals(listOf(140, 251, 999), formats.map { it.itag })
         assertEquals(listOf(251, 140, 999), preferredOrder(formats).map { it.itag })
+        // Under a cap the best format that fits comes first; with none fitting, the smallest does.
+        assertEquals(listOf(140, 251, 999), preferredOrder(formats, ceiling = 136_000).map { it.itag })
+        assertEquals(listOf(140, 251, 999), preferredOrder(formats, ceiling = 72_000).map { it.itag })
         assertNotNull(formats.last().signatureCipher)
     }
 

@@ -41,6 +41,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.luminance
+import `in`.melo.ui.glass.meloGlass
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -198,11 +202,15 @@ fun UnifiedPlayerSheetV2(
         }
     }
     val visualOvershootScaleY = remember { Animatable(1f) }
-    val initialFullPlayerOffsetY = remember(density) { with(density) { 24.dp.toPx() } }
+    // The full player no longer slides in under the panel: it rides the
+    // panel's top edge, so the panel and what is on it move as one.
+    val initialFullPlayerOffsetY = 0f
     val reducedMotion = `in`.melo.presentation.utils.rememberReducedMotion()
     val sheetAnimationSpec = remember(reducedMotion) {
         if (reducedMotion) androidx.compose.animation.core.snap<Float>()
-        else tween<Float>(durationMillis = 240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+        // The player spring: critically damped, stiffness 195, carrying the finger's
+        // speed, so the sheet settles without a timed curve's start and stop or any bounce.
+        else androidx.compose.animation.core.spring<Float>(dampingRatio = 1f, stiffness = 195f)
     }
     val sheetAnimationMutex = remember { MutatorMutex() }
     val sheetExpandedTargetY = 0f
@@ -273,10 +281,20 @@ fun UnifiedPlayerSheetV2(
         )
     }
 
+    val sheetTargetExpanded by rememberUpdatedState(
+        showPlayerContentArea && currentSheetContentState == PlayerSheetState.EXPANDED
+    )
     LaunchedEffect(sheetCollapsedTargetY, sheetMotionController) {
         // Keep the mini player anchored to the latest collapsed target whenever
-        // the navbar height/visibility changes under it.
-        sheetMotionController.syncToExpansion(sheetCollapsedTargetY)
+        // the navbar height/visibility changes under it. The tab bar hides as the player opens,
+        // so the anchor moves several times during an open: the animation is carried on to the
+        // new anchor in the sheet's own scope, since this effect (and anything it runs) is
+        // cancelled at the next move, which used to leave the player stopped short of the top.
+        if (sheetMotionController.isAnimating) {
+            scope.launch { animatePlayerSheet(targetExpanded = sheetTargetExpanded) }
+        } else {
+            sheetMotionController.syncToExpansion(sheetCollapsedTargetY)
+        }
     }
 
     LaunchedEffect(showPlayerContentArea, currentSheetContentState, reducedMotion) {
@@ -448,9 +466,24 @@ fun UnifiedPlayerSheetV2(
     val miniReadyAlpha = sheetThemeState.miniReadyAlpha
     val miniAppearScale = sheetThemeState.miniAppearScale
     val playerAreaBackground = sheetThemeState.playerAreaBackground
+    val miniCardColor = miniPlayerColor()
+    // The pages are recorded (Glass or Frost): the collapsed card is the same material as the
+    // tab bar, and fills in with the player colour as it opens.
+    val miniGlass = `in`.melo.ui.glass.LocalAppBackdrop.current != null
+    val miniCardHairline = if (miniGlass) `in`.melo.ui.glass.surfaceEdgeColor(miniCardColor.luminance() < 0.5f)
+        else MaterialTheme.colorScheme.outlineVariant
     // Elevation is only visible in the mini/collapsed state (expansion < 0.18).
     // miniReadyAlpha fades the shadow in during the initial song-appear animation.
     val isDragging = sheetBackAndDragState.isDragging
+    // The player's own fill covers the mini card's glass early in the open:
+    // held for the first few percent, then opaque by about a quarter of the way. Left
+    // to fade in over the whole travel, the glass (its bent top band and its rim) showed through
+    // the growing player and read as a second edge across its top.
+    val pillUntil = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) 0.12f else 0.2f
+    fun playerFill(open: Float) = ((open - 0.06f) / pillUntil).coerceIn(0f, 1f)
+    val playerFullyOpen by remember(pillUntil) {
+        derivedStateOf { playerFill(playerContentExpansionFraction.value) >= 1f }
+    }
     val visualCardShadowElevation by remember(showQueueSheet, miniReadyAlpha, isDragging) {
         derivedStateOf {
             if (
@@ -484,7 +517,7 @@ fun UnifiedPlayerSheetV2(
         isDragging = sheetBackAndDragState.isDragging,
         onAnimateSheet = { targetExpanded, animationSpec, initialVelocity ->
             if (animationSpec == null) {
-                animatePlayerSheet(targetExpanded = targetExpanded)
+                animatePlayerSheet(targetExpanded = targetExpanded, initialVelocity = initialVelocity)
             } else {
                 animatePlayerSheet(
                     targetExpanded = targetExpanded,
@@ -581,7 +614,23 @@ fun UnifiedPlayerSheetV2(
                                 shape = sheetInteractionState.playerShadowShape,
                                 clip = false
                             )
-                            .background(playerAreaBackground, sheetInteractionState.playerShadowShape)
+                            // The glass and its rim belong to the mini card; once the player's fill has
+                            // covered it they go, so no band or line is left along the player's edges.
+                            .then(
+                                if (miniGlass && !playerFullyOpen) Modifier.meloGlass(sheetInteractionState.playerShadowShape)
+                                else Modifier
+                            )
+                            .drawBehind {
+                                val open = playerFill(playerContentExpansionFraction.value)
+                                val outline = sheetInteractionState.playerShadowShape
+                                    .createOutline(size, layoutDirection, this)
+                                if (miniGlass) drawOutline(outline, playerAreaBackground, alpha = open)
+                                else drawOutline(outline, androidx.compose.ui.graphics.lerp(miniCardColor, playerAreaBackground, open))
+                                if (open < 1f) drawOutline(
+                                    outline, miniCardHairline, alpha = 1f - open,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(`in`.melo.ui.theme.MeloLayout.Hairline.toPx()),
+                                )
+                            }
                             .clip(sheetInteractionState.playerShadowShape)
                             // innerLayout:
                             // Measures the actual player content with full screen height targetContentHeightPx

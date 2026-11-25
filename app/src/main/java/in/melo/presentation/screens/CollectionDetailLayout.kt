@@ -1,5 +1,6 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.backdrop.backdrops.layerBackdrop
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -64,9 +65,9 @@ internal fun CollectionDetailLayout(
     content: LazyListScope.() -> Unit,
 ) {
     val isDarkTheme = LocalMeloDarkTheme.current
-    val base = MaterialTheme.colorScheme
-    val pair = item.imageUrl?.let { uri -> remember(uri) { ui.getAlbumColorSchemeFlow(uri) }.collectAsStateWithLifecycle().value }
-    val colors = pair?.let { if (isDarkTheme) it.dark else it.light } ?: base
+    val settings by ui.settings.collectAsStateWithLifecycle()
+    val palette = rememberPagePalette(item.imageUrl.takeIf { settings.detailPageTint }, isDarkTheme)
+    val base = if (settings.detailPageTint) MaterialTheme.colorScheme.tintedBy(palette) else MaterialTheme.colorScheme
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
@@ -75,7 +76,11 @@ internal fun CollectionDetailLayout(
     MaterialTheme(colorScheme = base) {
         val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         val minTopBarHeight = 64.dp + statusBarHeight
-        val maxTopBarHeight = 300.dp
+        // The full-screen cover shows the whole square, the page's width tall; on a screen too
+        // wide for that to leave room for the list, the cropped banner stays.
+        val fullScreenCover = settings.fullScreenDetailCover &&
+            configuration.screenWidthDp <= configuration.screenHeightDp * 0.62f
+        val maxTopBarHeight = if (fullScreenCover) configuration.screenWidthDp.dp else 300.dp
 
         val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
         val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
@@ -90,7 +95,7 @@ internal fun CollectionDetailLayout(
             )
         }
 
-        val topBarHeight = remember { Animatable(maxTopBarHeightPx) }
+        val topBarHeight = remember(maxTopBarHeightPx) { Animatable(maxTopBarHeightPx) }
         val collapseFraction by remember(minTopBarHeightPx, maxTopBarHeightPx) {
             derivedStateOf {
                 1f - ((topBarHeight.value - minTopBarHeightPx) / (maxTopBarHeightPx - minTopBarHeightPx)).coerceIn(
@@ -174,10 +179,12 @@ internal fun CollectionDetailLayout(
                 collapseFraction > 0.95f &&
                     (lazyListState.canScrollForward || lazyListState.canScrollBackward)
 
+            val listBackdrop = rememberPageBackdrop(blurAllowed = !settings.disableBlur)
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(if (listBackdrop != null) Modifier.layerBackdrop(listBackdrop) else Modifier)
                     .offset {
                         val extraHeight =
                             (topBarHeight.value - minTopBarHeightPx).roundToInt()
@@ -185,8 +192,10 @@ internal fun CollectionDetailLayout(
                     },
                 contentPadding = PaddingValues(
                     top = minTopBarHeight + 8.dp,
-                    start = 16.dp,
-                    end = if (showScrollBar) 24.dp else 16.dp,
+                    // Song rows carry their own 16dp inset, so their artwork lines up with the
+                    // title and back button; header items add the same gutter themselves.
+                    start = 0.dp,
+                    end = if (showScrollBar) 8.dp else 0.dp,
                     bottom = fabBottomPadding + 80.dp // To account for FAB
                 ),
                 verticalArrangement = Arrangement.spacedBy(`in`.melo.presentation.components.listSpacing()),
@@ -211,8 +220,9 @@ internal fun CollectionDetailLayout(
                 collapseFraction = collapseFraction,
                 headerHeight = currentTopBarHeightDp,
                 headerImageRequestSize = headerImageRequestSize,
+                artTopLuminance = palette.topLuminance,
+                listBackdrop = listBackdrop,
                 onBackPressed = { navController.popBackStack() },
-                onPlayClick = { ui.shuffleItem(item) }
             )
                 }
     }

@@ -1,5 +1,7 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.ui.theme.artworkOutline
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,12 +31,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material3.Icon
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -98,17 +95,7 @@ internal fun ForYouShelf(
     Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
         if (picks.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.home_for_you_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+                `in`.melo.presentation.components.MeloSectionHeader(stringResource(R.string.home_for_you_title))
                 BoxWithConstraints {
                     val cardWidth = topPickWidth(maxWidth)
                     val shelfState = rememberLazyListState()
@@ -199,7 +186,7 @@ private fun ForYouPlaylistCard(
             .aspectRatio(TOP_PICK_RATIO)
             .clip(TOP_PICK_SHAPE)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .artworkRim(TOP_PICK_SHAPE)
+            .artworkOutline(TOP_PICK_SHAPE)
             .combinedClickable(role = Role.Button, interactionSource = interactions, indication = null, onClick = onClick, onLongClick = onLongPress),
     ) {
         SmartImage(
@@ -323,11 +310,10 @@ private fun ForYouMoodCard(mood: HomeMood, modifier: Modifier, onClick: () -> Un
 private fun FindYourMood(moods: List<HomeMood>, onMoodClick: (HomeMood) -> Unit, onShowAllMoods: () -> Unit) {
     val foreground = artworkForeground()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = MeloLayout.PageGutter, end = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+        `in`.melo.presentation.components.MeloSectionHeader(
+            stringResource(R.string.home_find_your_mood),
+            contentPadding = PaddingValues(start = MeloLayout.PageGutter, end = MeloLayout.Space2),
         ) {
-            Text(stringResource(R.string.home_find_your_mood), style = MaterialTheme.typography.headlineSmall)
             TextButton(onClick = onShowAllMoods) { Text(stringResource(R.string.home_show_all_moods)) }
         }
         LazyRow(
@@ -338,7 +324,7 @@ private fun FindYourMood(moods: List<HomeMood>, onMoodClick: (HomeMood) -> Unit,
                 val interactions = remember { MutableInteractionSource() }
                 Box(
                     Modifier.width(154.dp).aspectRatio(1.15f).homePress(interactions)
-                        .clip(TOP_PICK_SHAPE).artworkRim(TOP_PICK_SHAPE)
+                        .clip(TOP_PICK_SHAPE).artworkOutline(TOP_PICK_SHAPE)
                         .combinedClickable(role = Role.Button, interactionSource = interactions, indication = null, onClick = { onMoodClick(mood) }),
                 ) {
                     MoodArtwork(mood, Modifier.fillMaxSize())
@@ -356,7 +342,7 @@ private fun FindYourMood(moods: List<HomeMood>, onMoodClick: (HomeMood) -> Unit,
 
 @Composable
 internal fun HomeMoodPickerDialog(onDismiss: () -> Unit, onMoodClick: (HomeMood) -> Unit) {
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.home_find_your_mood)) },
         text = {
@@ -425,23 +411,11 @@ private fun RecentlyPlayedFeed(
 ) {
     val openAllDescription = stringResource(R.string.home_recent_feed_open_all)
     Column(verticalArrangement = Arrangement.spacedBy(MeloLayout.Space3)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = MeloLayout.PageGutter, end = MeloLayout.PageGutter / 2),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.home_recent_feed_title),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            MeloIconButton(
-                icon = Icons.AutoMirrored.Rounded.ArrowForward,
-                contentDescription = openAllDescription,
-                onClick = onOpenAll,
-            )
-        }
+        `in`.melo.presentation.components.MeloSectionHeader(
+            stringResource(R.string.home_recent_feed_title),
+            Modifier.semantics { contentDescription = openAllDescription },
+            onOpen = onOpenAll,
+        )
         CompactTrackShelf(tracks, onClick, onLongPress)
     }
 }

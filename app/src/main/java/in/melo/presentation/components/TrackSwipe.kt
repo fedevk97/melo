@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -12,11 +13,6 @@ import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellati
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -153,10 +149,10 @@ fun TrackSwipeBox(
 }
 
 private fun TrackSwipeAction.icon() = when (this) {
-    TrackSwipeAction.ADD_TO_QUEUE -> Icons.AutoMirrored.Rounded.QueueMusic
-    TrackSwipeAction.PLAY_NEXT -> Icons.AutoMirrored.Rounded.PlaylistPlay
-    TrackSwipeAction.LIKE -> Icons.Rounded.Favorite
-    TrackSwipeAction.REMOVE, TrackSwipeAction.NONE -> Icons.Rounded.Delete
+    TrackSwipeAction.ADD_TO_QUEUE -> MeloIcons.QueueMusic
+    TrackSwipeAction.PLAY_NEXT -> MeloIcons.PlaylistPlay
+    TrackSwipeAction.LIKE -> MeloIcons.Favorite
+    TrackSwipeAction.REMOVE, TrackSwipeAction.NONE -> MeloIcons.Delete
 }
 
 @Composable

@@ -13,9 +13,30 @@ class PinnedStore(context: Context) {
     private val preferences = context.getSharedPreferences("pinned_items", Context.MODE_PRIVATE)
     private val mutablePins = MutableStateFlow(read())
     val pins: StateFlow<List<Music>> = mutablePins.asStateFlow()
+    private val mutableHidden = MutableStateFlow(preferences.getStringSet(HIDDEN_KEY, null).orEmpty().toSet())
+    /** Ids taken off the dials with "Remove from dial", kept off until pinned again. */
+    val hiddenFromDial: StateFlow<Set<String>> = mutableHidden.asStateFlow()
 
-    fun toggle(item: Music) = update { current ->
-        if (current.any { it.id == item.id }) current.filterNot { it.id == item.id } else listOf(item) + current
+    fun toggle(item: Music) {
+        // Pinning something taken off the dial brings it back.
+        if (item.id in mutableHidden.value) setHidden(mutableHidden.value - item.id)
+        update { current ->
+            if (current.any { it.id == item.id }) current.filterNot { it.id == item.id } else listOf(item) + current
+        }
+    }
+
+    /**
+     * Takes [item] off whichever dial it is on: unpinned, and kept off even where YouTube's own
+     * speed dial, what was played or the mixes would put it back, until it is pinned again.
+     */
+    fun removeFromDial(item: Music) {
+        if (mutablePins.value.any { it.id == item.id }) update { current -> current.filterNot { it.id == item.id } }
+        setHidden(mutableHidden.value + item.id)
+    }
+
+    private fun setHidden(value: Set<String>) {
+        mutableHidden.value = value
+        preferences.edit { putStringSet(HIDDEN_KEY, value) }
     }
 
     fun move(from: Int, to: Int) = update { current ->
@@ -29,12 +50,31 @@ class PinnedStore(context: Context) {
         preferences.edit { putString(KEY, encodePins(next)) }
     }
 
+    /**
+     * The tiles dial [name] was last dealt and what they were dealt for, so the next launch shows
+     * them at once instead of a dial that changes as the feed arrives.
+     * Null before the first deal.
+     */
+    fun savedDial(name: String): Pair<String, List<Music>>? {
+        val key = preferences.getString("$DIAL_PREFIX${name}_key", null) ?: return null
+        return key to decodePins(preferences.getString("$DIAL_PREFIX${name}_items", null))
+    }
+
+    fun saveDial(name: String, key: String, items: List<Music>) = preferences.edit {
+        putString("$DIAL_PREFIX${name}_key", key)
+        putString("$DIAL_PREFIX${name}_items", encodePins(items))
+    }
+
     /** Replaces every pin, for a restored backup. */
     fun replaceAll(items: List<Music>) = update { items }
 
     private fun read(): List<Music> = decodePins(preferences.getString(KEY, null))
 
-    private companion object { const val KEY = "items" }
+    private companion object {
+        const val KEY = "items"
+        const val HIDDEN_KEY = "hidden_from_dial"
+        const val DIAL_PREFIX = "saved_dial_"
+    }
 }
 
 internal fun encodePins(items: List<Music>): String = JSONArray().apply {

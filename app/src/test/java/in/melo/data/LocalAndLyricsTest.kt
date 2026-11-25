@@ -52,10 +52,10 @@ class LocalAndLyricsTest {
     }
 
     @Test fun settingsSurviveARoundTripAndOldBackups() {
-        val custom = AppSettings(useSmoothCorners = false, language = "en", navBarCompact = true, hapticsEnabled = false)
+        val custom = AppSettings(disableBlur = true, language = "en", navBarCompact = true, hapticsEnabled = false)
         assertEquals(custom, AppSettings.fromJson(custom.toJson()))
         val partial = AppSettings.fromJson(JSONObject().put("showScrollbar", false))
         assertFalse(partial.showScrollbar)
-        assertTrue(partial.useSmoothCorners)
+        assertFalse(partial.disableBlur)
     }
 }

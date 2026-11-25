@@ -1,5 +1,8 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.MeloSlider
+import `in`.melo.ui.glass.MeloSwitch
+import `in`.melo.presentation.icons.MeloIcons
 import android.annotation.SuppressLint
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -38,8 +41,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -84,7 +85,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign // Added
 import androidx.compose.foundation.horizontalScroll
@@ -105,24 +105,14 @@ import `in`.melo.presentation.viewmodel.PlayerViewModel
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material.icons.rounded.VolumeUp
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.material.icons.rounded.Check // Added import for Switch check icon
 import androidx.media3.common.util.UnstableApi
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import `in`.melo.presentation.components.MiniPlayerHeight
-import androidx.compose.material.icons.rounded.BarChart
-import androidx.compose.material.icons.rounded.Block
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -130,22 +120,14 @@ import androidx.compose.ui.graphics.toArgb
 import `in`.melo.presentation.components.WavyArcSlider
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.TextButton
-import androidx.compose.material.icons.rounded.Edit // Added
-import androidx.compose.material.icons.rounded.ExpandMore // Added
-import androidx.compose.material.icons.rounded.Save // Added
-import androidx.compose.material.icons.filled.Star // Added
 import androidx.compose.material3.Surface
 import `in`.melo.presentation.components.CustomPresetsSheet
 import `in`.melo.presentation.components.ReorderPresetsSheet
 import `in`.melo.presentation.components.SavePresetDialog
 import `in`.melo.presentation.components.RenamePresetDialog
 import `in`.melo.data.preferences.EqualizerViewMode
-import androidx.compose.material.icons.rounded.ViewQuilt
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.material.icons.automirrored.rounded.ShowChart
-import androidx.compose.material.icons.automirrored.rounded.ViewQuilt
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -387,16 +369,13 @@ fun EqualizerScreen(
                 // View Mode Toggle
                 FilledIconButton(
                     onClick = { equalizerViewModel.cycleViewMode() },
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    colors = `in`.melo.presentation.components.meloTonalIconColors()
                 ) {
                     Icon(
                         imageVector = when(uiState.viewMode) {
-                            EqualizerViewMode.SLIDERS -> Icons.Rounded.GraphicEq
-                            EqualizerViewMode.GRAPH -> Icons.AutoMirrored.Rounded.ShowChart
-                            EqualizerViewMode.HYBRID -> Icons.AutoMirrored.Rounded.ViewQuilt
+                            EqualizerViewMode.SLIDERS -> MeloIcons.GraphicEq
+                            EqualizerViewMode.GRAPH -> MeloIcons.ShowChart
+                            EqualizerViewMode.HYBRID -> MeloIcons.ViewQuilt
                         },
                         contentDescription = stringResource(R.string.equalizer_change_view_mode_cd)
                     )
@@ -423,7 +402,7 @@ fun EqualizerScreen(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.PowerSettingsNew,
+                        imageVector = MeloIcons.PowerSettingsNew,
                         contentDescription = if (isEnabled) {
                             stringResource(R.string.equalizer_disable_cd)
                         } else {
@@ -499,7 +478,7 @@ private fun PresetTabsRow(
                     if (isPinnedCustom) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
-                            imageVector = Icons.Filled.Star,
+                            imageVector = MeloIcons.Star,
                             contentDescription = stringResource(R.string.equalizer_custom_preset_cd),
                             modifier = Modifier.size(10.dp), // Slightly smaller
                             tint = if (selectedIndex == index) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary 
@@ -522,7 +501,7 @@ private fun PresetTabsRow(
             onClick = onEditClick 
         ) {
              Icon(
-                Icons.Rounded.Edit,
+                MeloIcons.Edit,
                 contentDescription = stringResource(R.string.equalizer_edit_presets_cd),
                 modifier = Modifier.size(18.dp)
             )
@@ -587,7 +566,7 @@ private fun BandSlidersSection(
                         if (isCustomOrSaved) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Icon(
-                                imageVector = Icons.Rounded.ExpandMore,
+                                imageVector = MeloIcons.ExpandMore,
                                 contentDescription = stringResource(R.string.equalizer_presets_cd),
                                 tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
@@ -606,7 +585,7 @@ private fun BandSlidersSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                              Icon(
-                                 imageVector = Icons.Rounded.Save,
+                                 imageVector = MeloIcons.Save,
                                  contentDescription = null,
                                  modifier = Modifier.size(20.dp),
                                  tint = MaterialTheme.colorScheme.onTertiaryContainer
@@ -633,7 +612,7 @@ private fun BandSlidersSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Save,
+                                imageVector = MeloIcons.Save,
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -658,7 +637,7 @@ private fun BandSlidersSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Save,
+                                imageVector = MeloIcons.Save,
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.onTertiaryContainer
@@ -1297,7 +1276,7 @@ private fun EffectCard(
                 }
             }
             
-            Switch(
+            MeloSwitch(
                 checked = isEnabled,
                 onCheckedChange = onEnabledChange,
                 modifier = Modifier.scale(0.8f) 
@@ -1329,7 +1308,7 @@ private fun UnsupportedEffectCard(
                 modifier = Modifier.align(Alignment.TopEnd)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Close,
+                    imageVector = MeloIcons.Close,
                     contentDescription = stringResource(R.string.common_dismiss),
                     tint = MaterialTheme.colorScheme.error
                 )
@@ -1343,7 +1322,7 @@ private fun UnsupportedEffectCard(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Block,
+                    imageVector = MeloIcons.Block,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(32.dp)
@@ -1387,7 +1366,7 @@ private fun UnsupportedEffectRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Rounded.Block,
+                imageVector = MeloIcons.Block,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(24.dp)
@@ -1407,7 +1386,7 @@ private fun UnsupportedEffectRow(
             }
             IconButton(onClick = onDismiss) {
                 Icon(
-                    imageVector = Icons.Rounded.Close,
+                    imageVector = MeloIcons.Close,
                     contentDescription = stringResource(R.string.common_dismiss),
                     tint = MaterialTheme.colorScheme.onErrorContainer
                 )
@@ -1447,13 +1426,13 @@ private fun IndividualEffectRow(
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Switch(
+            MeloSwitch(
                 checked = isEnabled,
                 onCheckedChange = onEnabledChange,
                 thumbContent = if (isEnabled) {
                     {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Rounded.Check,
+                            imageVector = MeloIcons.Check,
                             contentDescription = null,
                             modifier = Modifier.size(SwitchDefaults.IconSize),
                         )
@@ -1464,7 +1443,7 @@ private fun IndividualEffectRow(
         
         Spacer(modifier = Modifier.height(8.dp))
         
-        Slider(
+        MeloSlider(
             value = strength.toFloat(),
             onValueChange = { onStrengthChange(it.roundToInt()) },
             valueRange = 0f..maxStrength.toFloat(),
@@ -1505,13 +1484,13 @@ private fun VolumeControlCard(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.VolumeUp,
+                    imageVector = MeloIcons.VolumeUp,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
                 Column(modifier = Modifier.weight(1f)) {
-                    Slider(
+                    MeloSlider(
                         value = volume,
                         onValueChange = { newValue ->
                             // Subtle haptic feedback on each 5% change
@@ -1563,7 +1542,7 @@ private fun HybridBandSliders(
                 .height(220.dp) // Enlarged from 140.dp
                 .padding(horizontal = 4.dp) // Reduced outer padding
                 .clip(MeloLayout.PanelShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .background(`in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainerLow))
                 .padding(16.dp)
         ) {
              Text(
@@ -1726,7 +1705,7 @@ private fun HybridHorizontalSlider(
 
         // Horizontal Slider (Thick Track)
         Box(modifier = Modifier.weight(1f)) {
-            androidx.compose.material3.Slider(
+            MeloSlider(
                 value = level.toFloat(),
                 onValueChange = { 
                     val intVal = it.roundToInt()

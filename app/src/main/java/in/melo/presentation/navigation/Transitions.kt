@@ -28,8 +28,16 @@ internal class PageTransitions(
         return if (next) forwardSign else -forwardSign
     }
 
+    /**
+     * Pages that are a WebView. Its surface redraws on every frame of an alpha or
+     * offset animation and flickers, so these pages cut in and out instead.
+     */
+    private val webPages = setOf(Screen.GoogleSignIn.route, Screen.DiscordLogin.route)
+
+    private fun isWebPage(from: String?, to: String?): Boolean = from in webPages || to in webPages
+
     fun enter(from: String?, to: String?, isPop: Boolean = false): EnterTransition {
-        if (reducedMotion || from == to) return EnterTransition.None
+        if (reducedMotion || from == to || isWebPage(from, to)) return EnterTransition.None
         val tabs = isTabSwitch(from, to)
         val duration = if (tabs) 220 else 260
         val distance = if (tabs) tabDistancePx else detailDistancePx
@@ -43,7 +51,7 @@ internal class PageTransitions(
     }
 
     fun exit(from: String?, to: String?, isPop: Boolean = false): ExitTransition {
-        if (reducedMotion || from == to) return ExitTransition.None
+        if (reducedMotion || from == to || isWebPage(from, to)) return ExitTransition.None
         val tabs = isTabSwitch(from, to)
         val duration = if (tabs) 220 else 260
         val distance = if (tabs) tabDistancePx else detailDistancePx / 3

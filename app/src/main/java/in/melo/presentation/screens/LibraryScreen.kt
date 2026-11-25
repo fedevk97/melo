@@ -1,5 +1,6 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -9,10 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.Icons
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,6 +39,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import `in`.melo.presentation.components.MeloLargeTopBar
+import `in`.melo.presentation.components.MeloChip
+import `in`.melo.presentation.components.barMaterialColor
+import `in`.melo.ui.theme.separator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledIconButton
@@ -65,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import `in`.melo.presentation.components.HomeGradientTopBar
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -75,7 +80,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
@@ -277,52 +281,29 @@ fun LibraryScreen(model: MeloModel, navController: NavHostController, paddingVal
     val gradientBrush = remember(gradientColors) { Brush.verticalGradient(colors = gradientColors) }
     val headerContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = MeloAlpha.Disabled)
 
+    // The large "Library" title shrinks into a small one on a see-through bar as the
+    // shelves scroll; the tab chips stay pinned under it on the same material.
     Scaffold(
-        modifier = Modifier.background(brush = gradientBrush),
+        modifier = Modifier
+            .background(brush = gradientBrush),
+        containerColor = `in`.melo.presentation.components.pageBackground(),
         topBar = {
-            Column(Modifier.background(headerContainerColor)) {
-                TopAppBar(
-                    title = {
-                        Text(
-                            modifier = Modifier.padding(start = 8.dp),
-                            text = stringResource(R.string.library_screen_title),
-                            fontFamily = GoogleSansRounded,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.headlineLarge,
-                            letterSpacing = (-0.8).sp
-                        )
-                    },
-                    actions = {
-                        MeloTopActionsCapsule(Modifier.padding(end = MeloLayout.Space4)) {
-                            IconButton(
-                                onClick = { navController.navigateSafely(Screen.History.route) },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.history_title))
-                            }
-                            IconButton(
-                                onClick = { navController.navigateSafely(Screen.Settings.route) },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(painterResource(R.drawable.rounded_settings_24), contentDescription = stringResource(R.string.library_cd_open_settings))
-                            }
-                            MeloProfileAccountButton(
-                                profileImageUrl = youTubeAccount?.photoUrl,
-                                profileName = youTubeAccount?.name,
-                                profileHandle = youTubeAccount?.handle,
-                                spotifyConnected = discovery.spotifyEnabled,
-                                spotifyProfile = spotifyProfile,
-                                onProfileClick = { navController.navigateSafely(Screen.SettingsCategory.createRoute("account")) },
-                                onSettingsClick = { navController.navigateSafely(Screen.Settings.route) },
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurface,
-                    )
+            // No fill behind the header: the list starts below it, so nothing ever runs under it.
+            Column {
+                // The same title bar as Home, Explore and Podcasts: large title beside the actions,
+                // staying put (and full size) while the shelves scroll under it.
+                HomeGradientTopBar(
+                    onSettingsClick = { navController.navigateSafely(Screen.Settings.route) },
+                    onHistoryClick = { navController.navigateSafely(Screen.History.route) },
+                    profileImageUrl = youTubeAccount?.photoUrl,
+                    profileName = youTubeAccount?.name,
+                    profileHandle = youTubeAccount?.handle,
+                    spotifyConnected = discovery.spotifyEnabled,
+                    spotifyProfile = spotifyProfile,
+                    onProfileClick = { navController.navigateSafely(Screen.SettingsCategory.createRoute("account")) },
+                    transparentContainer = true,
+                    settingsButtonDirect = true,
+                    title = stringResource(R.string.library_screen_title),
                 )
                 LazyRow(
                     state = tabRowState,
@@ -333,62 +314,23 @@ fun LibraryScreen(model: MeloModel, navController: NavHostController, paddingVal
                 ) {
                     itemsIndexed(libraryTabs, key = { _, tab -> tab.storageKey }) { index, tab ->
                         val selected = pagerState.currentPage == index
-                        val chipShape = MeloLayout.CardShape
-                        val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                        val chipBackground by animateColorAsState(
-                            targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                            animationSpec = tween(240),
-                            label = "libraryTabBackground",
+                        // The shared chip: glass over the colour background, solid in its colour when chosen.
+                        MeloChip(
+                            label = stringResource(tab.titleRes),
+                            selected = selected,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            onWash = true,
                         )
-                        val chipForeground by animateColorAsState(
-                            targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                            label = "libraryTabForeground",
-                        )
-                        Box(
-                            modifier = Modifier.height(MeloLayout.ControlSize)
-                                .homePress(interactionSource)
-                                .selectable(
-                                    selected = selected,
-                                    role = Role.Tab,
-                                    interactionSource = interactionSource,
-                                    indication = null,
-                                ) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    scope.launch { pagerState.animateScrollToPage(index) }
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                modifier = Modifier.height(40.dp)
-                                    .clip(chipShape)
-                                    .background(chipBackground)
-                                    .border(
-                                        width = 0.75.dp,
-                                        color = if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
-                                        shape = chipShape,
-                                    )
-                                    .padding(horizontal = MeloLayout.Space4),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = stringResource(tab.titleRes),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = chipForeground,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
                     }
                 }
             }
         }
     ) { inner ->
         Box(Modifier.padding(top = inner.calculateTopPadding()).fillMaxSize()) {
-            Column(Modifier.background(headerContainerColor).fillMaxSize()) {
+            Column(Modifier.background(if (`in`.melo.presentation.components.LocalAmbientBackground.current) Color.Transparent else headerContainerColor).fillMaxSize()) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
+                    color = `in`.melo.presentation.components.pageBackground(),
                     shape = androidx.compose.ui.graphics.RectangleShape
                 ) {
                     Column(Modifier.fillMaxSize()) {
@@ -439,7 +381,7 @@ fun LibraryScreen(model: MeloModel, navController: NavHostController, paddingVal
                                 value = librarySearchQuery,
                                 onValueChange = { librarySearchQuery = it },
                                 modifier = Modifier.fillMaxWidth()
-                                    .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                                    .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                                     .focusRequester(searchFocusRequester),
                                 singleLine = true,
                                 label = {
@@ -448,14 +390,14 @@ fun LibraryScreen(model: MeloModel, navController: NavHostController, paddingVal
                                         maxLines = 1,
                                     )
                                 },
-                                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                                leadingIcon = { Icon(MeloIcons.Search, contentDescription = null) },
                                 trailingIcon = if (librarySearchQuery.isNotEmpty()) ({
                                     Box(
                                         modifier = Modifier.size(48.dp).clickable(role = Role.Button) { librarySearchQuery = "" },
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
-                                            Icons.Rounded.Close,
+                                            MeloIcons.Close,
                                             contentDescription = stringResource(R.string.playlist_filter_clear),
                                         )
                                     }
@@ -558,7 +500,7 @@ fun LibraryScreen(model: MeloModel, navController: NavHostController, paddingVal
 private fun PlaylistsTab(playlists: List<Music>, bottom: Dp, open: (Music) -> Unit, onLongPress: (Music) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = bottom),
+        contentPadding = PaddingValues(top = 4.dp, bottom = bottom),
         verticalArrangement = Arrangement.spacedBy(`in`.melo.presentation.components.listSpacing()),
     ) {
         items(playlists, key = Music::id) { item ->
@@ -583,7 +525,7 @@ private fun AlbumsTab(
     if (asList) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = bottom),
+            contentPadding = PaddingValues(top = 4.dp, bottom = bottom),
             verticalArrangement = Arrangement.spacedBy(`in`.melo.presentation.components.listSpacing()),
         ) {
             items(albums, key = Music::id) { item ->
@@ -619,7 +561,7 @@ private fun AlbumsTab(
 private fun ArtistsTab(artists: List<Music>, bottom: Dp, open: (Music) -> Unit, onLongPress: (Music) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = bottom),
+        contentPadding = PaddingValues(top = 4.dp, bottom = bottom),
         verticalArrangement = Arrangement.spacedBy(`in`.melo.presentation.components.listSpacing()),
     ) {
         items(artists, key = Music::id) { item ->
@@ -656,7 +598,7 @@ private fun LikedTab(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = bottom),
+            contentPadding = PaddingValues(top = 4.dp, bottom = bottom),
             verticalArrangement = Arrangement.spacedBy(`in`.melo.presentation.components.listSpacing()),
         ) {
             itemsIndexed(songs, key = { index, song -> "$index-${song.id}" }) { _, song ->
@@ -700,9 +642,12 @@ private fun LocalTab(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(stringResource(R.string.local_permission_title), style = MaterialTheme.typography.titleMedium)
-            Button(onClick = { request.launch(LocalLibrary.PERMISSION) }, modifier = Modifier.padding(top = 16.dp)) {
-                Text(stringResource(R.string.local_permission_action))
-            }
+            `in`.melo.presentation.components.MeloButton(
+                text = stringResource(R.string.local_permission_action),
+                onClick = { request.launch(LocalLibrary.PERMISSION) },
+                modifier = Modifier.padding(top = 16.dp),
+                size = `in`.melo.presentation.components.MeloButtonSize.Medium,
+            )
         }
         songs.isEmpty() -> {
             if (searchQuery.isNotBlank()) LibrarySearchEmptyState(searchQuery, Modifier.fillMaxSize())
@@ -712,7 +657,7 @@ private fun LocalTab(
         }
         else -> LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = bottom),
+            contentPadding = PaddingValues(top = 4.dp, bottom = bottom),
             verticalArrangement = Arrangement.spacedBy(`in`.melo.presentation.components.listSpacing()),
         ) {
             items(songs, key = { it.id }) { song ->
@@ -752,7 +697,7 @@ private fun DownloadsTab(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = bottom),
+        contentPadding = PaddingValues(top = 4.dp, bottom = bottom),
         verticalArrangement = Arrangement.spacedBy(`in`.melo.presentation.components.listSpacing()),
     ) {
         val groups = listOf(
@@ -806,7 +751,7 @@ private fun LibrarySearchEmptyState(query: String, modifier: Modifier = Modifier
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
-                Icons.Rounded.Search,
+                MeloIcons.Search,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

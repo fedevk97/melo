@@ -1,59 +1,51 @@
 package `in`.melo.presentation.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import `in`.melo.presentation.components.MeloBottomSheet as ModalBottomSheet
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import `in`.melo.ui.theme.GoogleSansRounded
-import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
-import kotlin.math.roundToInt
-import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import `in`.melo.R
-import androidx.compose.ui.text.style.TextOverflow
+import `in`.melo.playback.SleepTimer
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.ui.glass.MeloSlider
 import `in`.melo.ui.theme.MeloLayout
 
-val predefinedTimes = listOf(0, 5, 10, 15, 20, 30, 45, 60) // 0 represents 'Off'
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+/**
+ * The sleep timer: after this song, after a few songs, after a set time, or any length up to
+ * twelve hours on its own page. A running timer is ticked, counts down under the title, and can
+ * be turned off from here.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimerOptionsBottomSheet(
     onPlayCounter: (count: Int) -> Unit,
@@ -65,342 +57,268 @@ fun TimerOptionsBottomSheet(
     onCancelCountedPlay: () -> Unit,
     onSetPredefinedTimer: (minutes: Int) -> Unit,
     onSetEndOfTrackTimer: (enable: Boolean) -> Unit,
-    onOpenCustomTimePicker: () -> Unit,
-    onCancelTimer: () -> Unit
+    @Suppress("UNUSED_PARAMETER") onOpenCustomTimePicker: () -> Unit,
+    onCancelTimer: () -> Unit,
 ) {
-    var showCustomTimePicker by rememberSaveable { mutableStateOf(false) }
-    val context = LocalContext.current
-    var timerSliderPosition by remember { mutableStateOf(0f) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var pickingCustom by rememberSaveable { mutableStateOf(false) }
+    val songsLeft = playCount.toInt()
+    val custom = activeTimerDurationMinutes?.takeIf { it !in SleepTimer.PRESETS }
+    val running = activeTimerDurationMinutes != null || songsLeft > 0
 
-    val isSwitchEnabled = isEndOfTrackTimerActive
-
-    var counterSliderPosition by remember { mutableStateOf(1f) }
-    var isTimerMode by remember { mutableStateOf(true) } // true = timer mode, false = counter mode
-
-    // Animate background color
-    val boxBackgroundColor by animateColorAsState(
-        targetValue = if (isSwitchEnabled) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceContainerHigh,
-        label = "boxBackgroundColorAnimation"
-    )
-
-    // Animate corner radius
-    val boxCornerRadius by animateDpAsState(
-        targetValue = if (isSwitchEnabled) 18.dp else 50.dp,
-        label = "boxCornerRadiusAnimation"
-    )
-
-    LaunchedEffect(activeTimerDurationMinutes, activeTimerValueDisplay, playCount) {
-        timerSliderPosition = when {
-            activeTimerDurationMinutes != null -> {
-                val index = predefinedTimes.indexOf(activeTimerDurationMinutes)
-                if (index != -1) index.toFloat() else 0f
-            }
-            activeTimerValueDisplay == null -> 0f
-            activeTimerValueDisplay.startsWith("Custom:") -> 0f
-            else -> 0f
-        }
-        counterSliderPosition = playCount
-        // Restore counter mode if play count was previously set
-        if (playCount > 1f) {
-            isTimerMode = false
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
+    MeloBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
-            modifier = Modifier
-                .padding(horizontal = MeloLayout.Space4, vertical = 4.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+                .padding(horizontal = MeloLayout.PageGutter)
+                .padding(bottom = MeloLayout.Space4),
         ) {
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        shape = CircleShape
-                    )
-            ) {
-                Text(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    text = stringResource(R.string.sleep_timer_title),
-                    fontFamily = GoogleSansRounded,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Predefined times replaced by Slider
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                val currentIndex =
-                    timerSliderPosition.roundToInt().coerceIn(0, predefinedTimes.size - 1)
-                val currentMinutes = predefinedTimes[currentIndex]
-                val timerDisplayText = if (currentMinutes == 0) {
-                    stringResource(R.string.sleep_timer_zero_minutes_format)
-                } else {
-                    stringResource(R.string.sleep_timer_n_minutes_format, currentMinutes)
-                }
-                Text(
-                    text = timerDisplayText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 0.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = MeloLayout.PanelShape
-                        )
-                ) {
-                    Slider(
-                        value = timerSliderPosition,
-                        onValueChange = {
-                            timerSliderPosition = it
-                            isTimerMode = true
-                        },
-                        valueRange = 0f..(predefinedTimes.size - 1).toFloat(),
-                        steps = predefinedTimes.size - 2, // Number of discrete intervals
-                        enabled = isTimerMode || counterSliderPosition == 1f,
-                        onValueChangeFinished = {
-                            val selectedIndexOnFinish = timerSliderPosition.roundToInt()
-                                .coerceIn(0, predefinedTimes.size - 1)
-                            val selectedMinutesOnFinish = predefinedTimes[selectedIndexOnFinish]
-                            if (selectedMinutesOnFinish == 0) {
-                                if (activeTimerDurationMinutes != null) {
-                                    onCancelTimer()
-                                }
-                            } else {
-                                onSetPredefinedTimer(selectedMinutesOnFinish)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = MeloLayout.Space4, vertical = 12.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .fillMaxWidth()
-                        .padding(horizontal = 0.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = MeloLayout.PanelShape
-                        )
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-
-
-                val currentPlayCount = counterSliderPosition.toInt()
-                val timesPart = if (currentPlayCount == 1) {
-                    stringResource(R.string.sleep_timer_play_count_one_time)
-                } else {
-                    pluralStringResource(
-                        R.plurals.sleep_timer_play_count_n_times,
-                        currentPlayCount,
-                        currentPlayCount
-                    )
-                }
-                val counterDisplayText = stringResource(R.string.sleep_timer_play_count_label, timesPart)
-                Text(
-                    text = counterDisplayText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 0.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = MeloLayout.PanelShape
-                        )
-                ) {
-                    Slider(
-                        value = counterSliderPosition,
-                        onValueChange = {
-                            counterSliderPosition = it
-                            isTimerMode = false
-                        },
-                        valueRange = 1f..10f,
-                        steps = 8,
-                        enabled = !isTimerMode || timerSliderPosition == 0f,
-                        onValueChangeFinished = {
-                            onCancelTimer()
-                            onSetEndOfTrackTimer(false)
-                            onPlayCounter(counterSliderPosition.toInt())
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = MeloLayout.Space4, vertical = 12.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // End of track option
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 0.dp)
-                    .clip(
-                        AbsoluteSmoothCornerShape(
-                            cornerRadiusBL = boxCornerRadius,
-                            smoothnessAsPercentBR = 60,
-                            cornerRadiusTR = boxCornerRadius,
-                            smoothnessAsPercentTL = 60,
-                            cornerRadiusTL = boxCornerRadius,
-                            smoothnessAsPercentBL = 60,
-                            cornerRadiusBR = boxCornerRadius,
-                            smoothnessAsPercentTR = 60
-                        )
-                    ) // Apply animated corner radius for clipping
-                    .background(color = boxBackgroundColor)   // Apply animated background color
-                    .clickable(
-                        enabled = isTimerMode || counterSliderPosition == 1f,
-                        onClick = {
-                            onSetEndOfTrackTimer(!isSwitchEnabled)
-                        }
-                    )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp, horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.sleep_timer_end_of_current_track),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp),
-                        color = if (isSwitchEnabled) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface // Adjust text color for contrast
-                    )
-                    Switch(
-                        checked = isSwitchEnabled,
-                        enabled = isTimerMode || counterSliderPosition == 1f,
-                        onCheckedChange = {
-                            onSetEndOfTrackTimer(it)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.tertiary,
-                            checkedTrackColor = MaterialTheme.colorScheme.tertiaryContainer,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        thumbContent = if (isSwitchEnabled) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = stringResource(R.string.sleep_timer_cd_switch_on),
-                                    tint = MaterialTheme.colorScheme.tertiaryContainer,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize),
-                                )
-                            }
-                        } else {
-                            null
-                        }
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp, horizontal = MeloLayout.Space2),
-                horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space2),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MeloButton(
-                    text = stringResource(R.string.sleep_timer_custom_time),
-                    enabled = counterSliderPosition == 1f,
-                    onClick = {
-                        showCustomTimePicker = true
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-                MeloButton(
-                    text = stringResource(R.string.sleep_timer_cancel_timer),
-                    onClick = {
-                        onCancelTimer()
+            if (pickingCustom) {
+                CustomTimerPage(
+                    initialMinutes = custom ?: 90,
+                    onBack = { pickingCustom = false },
+                    onStart = { minutes ->
+                        onSetPredefinedTimer(minutes)
                         onDismiss()
-                        onCancelCountedPlay()
                     },
-                    size = MeloButtonSize.Large,
-                    style = MeloButtonStyle.Tonal,
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    enabled = activeTimerValueDisplay != null || counterSliderPosition != 1f,
-                    modifier = Modifier.weight(1f),
+                )
+                return@Column
+            }
+            TimerHeader(
+                title = stringResource(R.string.sleep_timer_title),
+                subtitle = when {
+                    activeTimerDurationMinutes != null && activeTimerValueDisplay != null ->
+                        stringResource(R.string.sleep_timer_pauses_in, activeTimerValueDisplay)
+                    isEndOfTrackTimerActive -> stringResource(R.string.sleep_timer_pauses_after_song)
+                    songsLeft > 1 -> stringResource(R.string.sleep_timer_pauses_after_songs, songsLeft)
+                    else -> stringResource(R.string.sleep_timer_idle)
+                },
+            )
+            MeloGroupedList {
+                // Finishing the song is what people reach for at the end of a listen, so it leads.
+                TimerRow(
+                    label = stringResource(R.string.sleep_timer_after_song),
+                    selected = isEndOfTrackTimerActive,
+                ) {
+                    onSetEndOfTrackTimer(true)
+                    onDismiss()
+                }
+                SongCountRow(
+                    activeCount = songsLeft.takeIf { it > 1 },
+                    onStart = { count ->
+                        onPlayCounter(count)
+                        onDismiss()
+                    },
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(MeloLayout.Space4))
+            MeloGroupedList {
+                SleepTimer.PRESETS.forEach { minutes ->
+                    TimerRow(
+                        label = timerLength(minutes),
+                        selected = minutes == activeTimerDurationMinutes,
+                    ) {
+                        onSetPredefinedTimer(minutes)
+                        onDismiss()
+                    }
+                }
+                TimerRow(
+                    label = stringResource(R.string.sleep_timer_custom),
+                    value = custom?.let { timerLength(it) },
+                    selected = custom != null,
+                    chevron = true,
+                ) { pickingCustom = true }
+            }
+            if (running) {
+                Spacer(Modifier.height(MeloLayout.Space4))
+                MeloGroupedList {
+                    TimerRow(
+                        label = stringResource(R.string.sleep_timer_turn_off),
+                        selected = false,
+                        color = MaterialTheme.colorScheme.error,
+                    ) {
+                        onCancelTimer()
+                        onCancelCountedPlay()
+                        onDismiss()
+                    }
+                }
+            }
         }
     }
+}
 
-    if (showCustomTimePicker) {
-        val initialHour = 0    // Default to 0 hours for a duration
-        val initialMinute = 15 // Default to 15 minutes for a duration
-
-        val timePickerState = rememberTimePickerState(
-            initialHour = initialHour,
-            initialMinute = initialMinute,
-            is24Hour = true // Consistent with your previous setting (24-hour format)
-        )
-
-        AlertDialog(
-            onDismissRequest = {
-                showCustomTimePicker = false // Dismiss the M3 dialog
-                // No need to call onDismiss() for the bottom sheet here,
-                // as that's handled by the confirm button or if the user specifically dismisses the bottom sheet.
-            },
-            title = { Text(stringResource(R.string.sleep_timer_ui_set_custom_duration)) },
-            text = {
-                TimePicker(state = timePickerState)
-            },
-            confirmButton = {
-                MeloButton(
-                    text = stringResource(R.string.common_ok),
-                    onClick = {
-                        val hour = timePickerState.hour
-                        val minute = timePickerState.minute
-                        val totalMinutes = hour * 60 + minute
-
-                        if (totalMinutes > 0) { // Ensure some time is set
-                            onSetPredefinedTimer(totalMinutes) // Your existing callback
-                        }
-                        showCustomTimePicker = false // Dismiss the M3 dialog
-                        onDismiss() // Dismiss the bottom sheet after setting time, as per original logic
-                    },
-                    size = MeloButtonSize.Medium,
-                    style = MeloButtonStyle.Text,
-                )
-            },
-            dismissButton = {
-                MeloButton(
-                    text = stringResource(R.string.common_cancel),
-                    onClick = {
-                        showCustomTimePicker = false // Dismiss the M3 dialog
-                    },
-                    size = MeloButtonSize.Medium,
-                    style = MeloButtonStyle.Text,
-                )
+@Composable
+private fun TimerHeader(title: String, subtitle: String, onBack: (() -> Unit)? = null) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = MeloLayout.Space1, bottom = MeloLayout.Space4),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (onBack != null) {
+            IconButton(onClick = onBack, modifier = Modifier.padding(end = MeloLayout.Space1)) {
+                Icon(MeloIcons.ArrowBack, contentDescription = stringResource(R.string.common_back))
             }
+        }
+        Column(Modifier.weight(1f).padding(start = if (onBack == null) MeloLayout.Space1 else 0.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimerRow(
+    label: String,
+    selected: Boolean,
+    value: String? = null,
+    chevron: Boolean = false,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .selectable(selected = selected, role = Role.Button, onClick = onClick)
+            .padding(horizontal = MeloLayout.PageGutter),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = color, modifier = Modifier.weight(1f))
+        if (value != null) {
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = MeloLayout.Space2),
+            )
+        }
+        if (selected) {
+            Icon(
+                MeloIcons.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = MeloLayout.Space3).size(18.dp),
+            )
+        }
+        if (chevron) {
+            Icon(
+                MeloIcons.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = MeloLayout.Space2).size(14.dp),
+            )
+        }
+    }
+}
+
+/** "After 3 songs", with − and + beside it; the row itself starts it. */
+@Composable
+private fun SongCountRow(activeCount: Int?, onStart: (Int) -> Unit) {
+    var count by remember(activeCount) { mutableIntStateOf(activeCount ?: 2) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .selectable(selected = activeCount == count, role = Role.Button) { onStart(count) }
+            .padding(start = MeloLayout.PageGutter, end = MeloLayout.Space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(R.string.sleep_timer_after_songs, count),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
+        if (activeCount == count) {
+            Icon(
+                MeloIcons.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(end = MeloLayout.Space2).size(18.dp),
+            )
+        }
+        StepButton("−", stringResource(R.string.sleep_timer_less), enabled = count > 2) { count-- }
+        StepButton("+", stringResource(R.string.sleep_timer_more), enabled = count < SleepTimer.MAX_SONGS) { count++ }
+    }
+}
+
+/** Any length up to twelve hours: a large readout over a slider, with − and + for one step. */
+@Composable
+private fun CustomTimerPage(initialMinutes: Int, onBack: () -> Unit, onStart: (Int) -> Unit) {
+    var minutes by rememberSaveable { mutableIntStateOf(initialMinutes) }
+    TimerHeader(
+        title = stringResource(R.string.sleep_timer_custom),
+        subtitle = stringResource(R.string.sleep_timer_idle),
+        onBack = onBack,
+    )
+    Text(
+        text = timerLength(minutes),
+        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+        color = MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = MeloLayout.Space2, bottom = MeloLayout.Space3),
+    )
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space1),
+    ) {
+        StepButton("−", stringResource(R.string.sleep_timer_less), enabled = minutes > SleepTimer.STEP_MINUTES) {
+            minutes -= SleepTimer.STEP_MINUTES
+        }
+        MeloSlider(
+            value = SleepTimer.fractionOf(minutes),
+            onValueChange = { minutes = SleepTimer.minutesAt(it) },
+            modifier = Modifier.weight(1f),
+        )
+        StepButton("+", stringResource(R.string.sleep_timer_more), enabled = minutes < SleepTimer.MAX_MINUTES) {
+            minutes += SleepTimer.STEP_MINUTES
+        }
+    }
+    Spacer(Modifier.height(MeloLayout.Space6))
+    MeloButton(
+        text = stringResource(R.string.sleep_timer_start),
+        onClick = { onStart(minutes) },
+        icon = MeloIcons.Timer,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun StepButton(label: String, contentDescription: String, enabled: Boolean, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.semantics { this.contentDescription = contentDescription },
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.85f else 0.25f),
+        )
+    }
+}
+
+/** "45 min", "1 h", or "1 h 25 min". */
+@Composable
+private fun timerLength(minutes: Int): String {
+    val h = minutes / 60
+    val m = minutes % 60
+    return when {
+        h == 0 -> stringResource(R.string.sleep_timer_minutes_short, m)
+        m == 0 -> stringResource(R.string.sleep_timer_hours_short, h)
+        else -> stringResource(R.string.sleep_timer_hours_minutes_short, h, m)
     }
 }

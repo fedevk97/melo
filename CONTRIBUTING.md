@@ -18,15 +18,15 @@ Include:
 
 - the Melo version or commit;
 - your Android version and device model;
-- whether you built it with the native engine or with `-PnativeRuntime=false`;
+- whether you installed a release, a CI artifact or your own build;
 - steps to reproduce;
 - relevant `adb logcat` output, **with tokens, usernames and email addresses removed**.
 
 ## Pull requests
 
 1. Keep the change focused and explain why it is needed.
-2. Run `./gradlew :app:testDebugUnitTest :app:lintDebug` (add `-PnativeRuntime=false` if you do not have the Spotify APKM).
-3. For audio changes, check the decoded signal, not only the player state: past the unencrypted lead-in, after a seek, and across a track transition. See [`native-runtime/README.md`](native-runtime/README.md).
+2. Run `./gradlew :app:testDebugUnitTest :app:lintDebug`.
+3. For audio changes, check the decoded signal, not only the player state: after a seek and across a track transition.
 4. Write code, comments and documentation in English. New user-facing strings go in `res/values/` (English) and `res/values-fr/` (French).
 
 ## What will not be accepted

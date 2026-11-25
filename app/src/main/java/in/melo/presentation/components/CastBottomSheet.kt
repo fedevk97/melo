@@ -1,5 +1,7 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import android.Manifest
 import androidx.compose.animation.AnimatedVisibility
@@ -54,18 +56,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.rounded.Bluetooth
-import androidx.compose.material.icons.rounded.BluetoothDisabled
-import androidx.compose.material.icons.rounded.BatteryFull
-import androidx.compose.material.icons.rounded.Headphones
-import androidx.compose.material.icons.rounded.Speaker
-import androidx.compose.material.icons.rounded.Tv
-import androidx.compose.material.icons.rounded.Wifi
-import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -77,6 +67,7 @@ import `in`.melo.presentation.components.MeloBottomSheet as ModalBottomSheet
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -100,6 +91,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -107,8 +99,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -161,7 +154,8 @@ import `in`.melo.ui.theme.MeloLayout
 fun CastBottomSheet(
     playerViewModel: PlayerViewModel,
     onDismiss: () -> Unit,
-    onExpansionChanged: (Float) -> Unit = {}
+    onExpansionChanged: (Float) -> Unit = {},
+    onOpenAudioPipeline: (() -> Unit)? = null,
 ) {
     val routes by playerViewModel.castRoutes.collectAsStateWithLifecycle()
     val selectedRoute by playerViewModel.selectedRoute.collectAsStateWithLifecycle()
@@ -293,10 +287,10 @@ fun CastBottomSheet(
             subtitle = stringResource(R.string.cast_subtitle_session),
             isRemote = true,
             icon = when (remoteRoute.deviceType) {
-                MediaRouter.RouteInfo.DEVICE_TYPE_TV -> Icons.Rounded.Tv
-                MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER, MediaRouter.RouteInfo.DEVICE_TYPE_BUILTIN_SPEAKER -> Icons.Rounded.Speaker
-                MediaRouter.RouteInfo.DEVICE_TYPE_BLUETOOTH_A2DP -> Icons.Rounded.Bluetooth
-                else -> Icons.Filled.Cast
+                MediaRouter.RouteInfo.DEVICE_TYPE_TV -> MeloIcons.Tv
+                MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER, MediaRouter.RouteInfo.DEVICE_TYPE_BUILTIN_SPEAKER -> MeloIcons.Speaker
+                MediaRouter.RouteInfo.DEVICE_TYPE_BLUETOOTH_A2DP -> MeloIcons.Headphones
+                else -> MeloIcons.Cast
             },
             isConnecting = isCastConnecting,
             volume = routeVolume.toFloat().coerceAtLeast(0f),
@@ -308,9 +302,9 @@ fun CastBottomSheet(
         ActiveDeviceUi(
             id = "phone",
             title = if (isBluetoothAudio) activeBluetoothName else stringResource(R.string.cast_this_phone),
-            subtitle = if (isBluetoothAudio) stringResource(R.string.cast_bluetooth_audio) else stringResource(R.string.cast_local_playback),
+            subtitle = if (isBluetoothAudio) stringResource(R.string.cast_bluetooth_audio) else "",
             isRemote = false,
-            icon = if (isBluetoothAudio) Icons.Rounded.Bluetooth else Icons.Rounded.Headphones,
+            icon = if (isBluetoothAudio) MeloIcons.Headphones else MeloIcons.Phone,
             isConnecting = false,
             volume = trackVolume,
             volumeRange = 0f..1f,
@@ -340,14 +334,12 @@ fun CastBottomSheet(
         onDispose { onExpansionChanged(0f) }
     }
 
-    ModalBottomSheet(
+    `in`.melo.presentation.components.MeloBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
         shape = MeloLayout.SheetShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        // AQUÍ APLICAMOS EL FIX: Anulamos la fábrica de overscroll para todo lo que esté aquí adentro
+        // No overscroll stretch anywhere inside the sheet.
         CompositionLocalProvider(
             LocalOverscrollFactory provides null
         ) {
@@ -400,7 +392,8 @@ fun CastBottomSheet(
                             playerViewModel.refreshCastRoutes()
                             playerViewModel.refreshLocalConnectionInfo(refreshBluetoothDevices = true)
                         },
-                        startWithControls = isRemoteSession
+                        startWithControls = isRemoteSession,
+                        onOpenAudioPipeline = onOpenAudioPipeline,
                     )
                 }
             }
@@ -484,12 +477,12 @@ private fun CastPermissionStep(
                 verticalArrangement = Arrangement.spacedBy(MeloLayout.Space4)
             ) {
                 PermissionHighlight(
-                    icon = Icons.Rounded.Bluetooth,
+                    icon = MeloIcons.Bluetooth,
                     title = stringResource(R.string.cast_perm_nearby_title),
                     description = stringResource(R.string.cast_perm_nearby_desc)
                 )
                 PermissionHighlight(
-                    icon = Icons.Rounded.Wifi,
+                    icon = MeloIcons.Wifi,
                     title = stringResource(R.string.cast_perm_location_title),
                     description = stringResource(R.string.cast_perm_location_desc)
                 )
@@ -566,7 +559,8 @@ private fun CastSheetContent(
     onTurnOnWifi: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
     onRefresh: () -> Unit,
-    startWithControls: Boolean = true
+    startWithControls: Boolean = true,
+    onOpenAudioPipeline: (() -> Unit)? = null,
 ) {
     val allConnectivityOff = !state.wifiEnabled && !state.isBluetoothEnabled
     val configuration = LocalConfiguration.current
@@ -600,18 +594,10 @@ private fun CastSheetContent(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(MeloLayout.Space3)
         ) {
-            Box(
-                modifier = Modifier.background(
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    shape = CircleShape
-                )
-            ) {
-                Text(
-                    modifier = Modifier.padding(start = MeloLayout.Space2, end = 8.dp),
-                    text = stringResource(R.string.cast_title_connect),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-            }
+            Text(
+                text = stringResource(R.string.cast_title_connect),
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
 
             AnimatedVisibility(
                 visible = state.isScanning,
@@ -621,7 +607,7 @@ private fun CastSheetContent(
             ) {
                 BadgeChip(
                     text = stringResource(R.string.cast_scanning_nearby),
-                    iconVector = Icons.Filled.Refresh,
+                    iconVector = MeloIcons.Refresh,
                     contentColor = MaterialTheme.colorScheme.primary
                 )
             }
@@ -659,6 +645,7 @@ private fun CastSheetContent(
                         onOpenBluetoothSettings = onOpenBluetoothSettings,
                         onRefresh = onRefresh,
                         bottomSpacing = 20.dp,
+                        onOpenAudioPipeline = onOpenAudioPipeline,
                     )
                     1 -> CastDevicesTabContent(
                         state = state,
@@ -679,16 +666,22 @@ private fun CastSheetContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(MeloLayout.Space2),
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(2.dp),
             containerColor = Color.Transparent,
             divider = {},
             indicator = {}
         ) {
             TabAnimation(
                 index = 0,
+                selectedColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = CircleShape,
+                onSelectedColor = MaterialTheme.colorScheme.onSurface,
+                unselectedColor = Color.Transparent,
+                onUnselectedColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedBorder = false,
                 title = stringResource(R.string.cast_tab_controls),
                 selectedIndex = pagerState.currentPage,
                 onClick = {
@@ -700,21 +693,27 @@ private fun CastSheetContent(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Rounded.Speaker,
-                        contentDescription = stringResource(R.string.cast_tab_controls),
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        MeloIcons.Speaker,
+                        contentDescription = null,
+                        modifier = Modifier.padding(horizontal = 4.dp).size(18.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "CONTROLS",
+                        stringResource(R.string.cast_tab_controls),
                         fontFamily = GoogleSansRounded,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
             TabAnimation(
                 index = 1,
+                selectedColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = CircleShape,
+                onSelectedColor = MaterialTheme.colorScheme.onSurface,
+                unselectedColor = Color.Transparent,
+                onUnselectedColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedBorder = false,
                 title = stringResource(R.string.cast_tab_devices),
                 selectedIndex = pagerState.currentPage,
                 onClick = {
@@ -726,15 +725,15 @@ private fun CastSheetContent(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Filled.Devices,
-                        contentDescription = stringResource(R.string.cast_tab_devices),
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        MeloIcons.Devices,
+                        contentDescription = null,
+                        modifier = Modifier.padding(horizontal = 4.dp).size(18.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "DEVICES",
+                        stringResource(R.string.cast_tab_devices),
                         fontFamily = GoogleSansRounded,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -752,6 +751,7 @@ private fun CastControlsTabContent(
     onOpenBluetoothSettings: () -> Unit,
     onRefresh: () -> Unit,
     bottomSpacing: Dp,
+    onOpenAudioPipeline: (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -775,23 +775,19 @@ private fun CastControlsTabContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(MeloLayout.Space1)) {
-                    Text(
-                        text = stringResource(R.string.cast_connectivity),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = if (allConnectivityOff) {
-                            stringResource(R.string.cast_turn_on_wifi_bt)
-                        } else {
-                            "Manage active radios and rescan"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    CastSectionLabel(stringResource(R.string.cast_connectivity))
+                    if (allConnectivityOff) {
+                        Text(
+                            text = stringResource(R.string.cast_turn_on_wifi_bt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                IconButton(onClick = onRefresh) {
-                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.cast_cd_refresh_connections))
-                }
+                CastRefreshButton(
+                    onClick = onRefresh,
+                    contentDescription = stringResource(R.string.cast_cd_refresh_connections)
+                )
             }
             QuickSettingsRow(
                 wifiOn = state.wifiRadioOn,
@@ -801,6 +797,17 @@ private fun CastControlsTabContent(
                 bluetoothEnabled = state.isBluetoothEnabled,
                 bluetoothName = state.bluetoothName,
                 onBluetoothClick = onOpenBluetoothSettings
+            )
+        }
+        // Only the phone's own output has a pipeline Melo can describe.
+        if (onOpenAudioPipeline != null && !state.activeDevice.isRemote) {
+            QuickSettingTile(
+                label = stringResource(R.string.audio_pipeline),
+                subtitle = stringResource(R.string.audio_pipeline_row_subtitle),
+                icon = MeloIcons.GraphicEq,
+                isActive = false,
+                onClick = onOpenAudioPipeline,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
         Spacer(modifier = Modifier.height(bottomSpacing))
@@ -1100,7 +1107,9 @@ private fun CastSheetContainer(
                 .then(sheetDragModifier)
                 .nestedScroll(nestedScrollConnection),
             shape = MeloLayout.SheetShape,
-            color = MaterialTheme.colorScheme.surfaceContainerLow
+            // Pure black (white in light mode), so the cards on it carry the depth. Read from the
+            // surface's brightness because Now Playing tints its own color scheme from the artwork.
+            color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color.Black else Color.White
         ) {
             Box(modifier = Modifier.padding(bottom = MeloLayout.Space4)) {
                 content()
@@ -1182,19 +1191,10 @@ private fun CollapsibleCastTopBar(
                 },
             verticalArrangement = Arrangement.spacedBy(MeloLayout.Space3)
         ) {
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        shape = CircleShape
-                    )
-            ) {
-                Text(
-                    modifier = Modifier.padding(start = 4.dp),
-                    text = stringResource(R.string.cast_title_connect),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-            }
+            Text(
+                text = stringResource(R.string.cast_title_connect),
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
 
             AnimatedVisibility(
                 visible = isScanning,
@@ -1204,7 +1204,7 @@ private fun CollapsibleCastTopBar(
             ) {
                 BadgeChip(
                     text = stringResource(R.string.cast_scanning_nearby),
-                    iconVector = Icons.Filled.Refresh,
+                    iconVector = MeloIcons.Refresh,
                     contentColor = MaterialTheme.colorScheme.primary
                 )
             }
@@ -1234,34 +1234,53 @@ private fun DeviceSectionHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(MeloLayout.Space2)
+            modifier = Modifier.padding(end = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(MeloLayout.Space1)
         ) {
-            Text(
-                text = stringResource(R.string.cast_nearby_devices),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-            )
-            Text(
-                text = if (hasDevices) "Tap to connect" else "No devices yet",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            CastSectionLabel(stringResource(R.string.cast_nearby_devices))
+            // With no devices the card below already says the search is on; only a list needs the hint.
+            if (hasDevices) {
+                Text(
+                    text = "Tap to connect",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
-        IconButton(
+        CastRefreshButton(
             onClick = onRefresh,
-            colors = IconButtonDefaults.iconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ),
-            modifier = Modifier.clip(MeloLayout.PanelShape)
-        ) {
-            Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.cast_cd_refresh_devices))
-        }
+            contentDescription = stringResource(R.string.cast_cd_refresh_devices)
+        )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+/** A section heading in the sheet: quieter than the device name it sits under. */
+@Composable
+private fun CastSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+/** The same small round refresh button on both tabs. */
+@Composable
+private fun CastRefreshButton(onClick: () -> Unit, contentDescription: String) {
+    IconButton(
+        onClick = onClick,
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        modifier = Modifier.size(36.dp)
+    ) {
+        Icon(MeloIcons.Refresh, contentDescription = contentDescription, modifier = Modifier.size(18.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ActiveDeviceHero(
     device: ActiveDeviceUi,
@@ -1271,165 +1290,132 @@ private fun ActiveDeviceHero(
     var sliderValue by remember(device.id, device.volume) { mutableFloatStateOf(device.volume) }
     LaunchedEffect(device.volume) { sliderValue = device.volume }
     val haptics = LocalHapticFeedback.current
-
-    val discreteSteps = remember(device.volumeRange) {
-        val span = device.volumeRange.endInclusive - device.volumeRange.start
-        if (span <= 1f) 20 else span.toInt().coerceAtLeast(0) - 1
-    }.coerceAtLeast(0)
     var lastStep by remember(device.id) { mutableIntStateOf(-1) }
+    val colors = MaterialTheme.colorScheme
 
-    val heroShape = AbsoluteSmoothCornerShape(
-        cornerRadiusTL = 42.dp,
-        cornerRadiusTR = 20.dp,
-        cornerRadiusBL = 20.dp,
-        cornerRadiusBR = 42.dp,
-        smoothnessAsPercentTL = 70,
-        smoothnessAsPercentTR = 70,
-        smoothnessAsPercentBL = 70,
-        smoothnessAsPercentBR = 70
-    )
-
-    MeloCard(
-        shape = heroShape,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
+    // One even shape and no rim: the card reads as a surface, not an outline.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MeloLayout.CardShape)
+            .background(colors.surfaceContainerHigh)
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space4),
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(colors.onSurface.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(62.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(
-                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(
-                                    alpha = if (device.isConnecting) 0.18f else 0.12f
-                                ),
-                                shape = CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (device.isConnecting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(34.dp),
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                trackColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = MeloAlpha.Divider),
-                                strokeWidth = 4.dp,
-                                strokeCap = StrokeCap.Round
-                            )
-                        } else {
-                            Icon(
-                                imageVector = device.icon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                        }
-                    }
-                }
-
-                // La columna de texto dicta la altura de la Row
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = device.title,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        maxLines = 2
+                if (device.isConnecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = colors.onSurface,
+                        trackColor = Color.Transparent,
+                        strokeWidth = 2.5.dp,
+                        strokeCap = StrokeCap.Round
                     )
-
-                    val statusText = buildString {
-                        append(device.subtitle)
-                        append(" • ")
-                        append(device.connectionLabel)
-                    }
-
-                    Text(
-                        text = if (device.isConnecting && device.isRemote) stringResource(R.string.cast_connecting_ellipsis) else statusText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        maxLines = 1
+                } else {
+                    Icon(
+                        imageVector = device.icon,
+                        contentDescription = null,
+                        tint = colors.onSurface,
+                        modifier = Modifier.size(22.dp)
                     )
-                    if (device.isRemote) {
-                        MeloButton(
-                            text = stringResource(R.string.cast_disconnect),
-                            onClick = onDisconnect,
-                            enabled = !device.isConnecting,
-                            size = MeloButtonSize.Medium,
-                            style = MeloButtonStyle.Tonal,
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(top = 4.dp),
-                            leadingContent = {
-                                Icon(
-                                modifier = Modifier.size(22.dp),
-                                painter = painterResource(R.drawable.rounded_mimo_disconnect_24),
-                                contentDescription = null,
-                            )
-                            },
-                        )
-                    }
                 }
             }
-
-            // Sección de Volumen (Sin cambios)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (device.isRemote) stringResource(R.string.cast_volume_device) else stringResource(R.string.cast_volume_phone),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                    Text(
-                        text = buildVolumeLabel(sliderValue, device.volumeRange.endInclusive),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
-                val interactionSource = remember { MutableInteractionSource() }
-                Slider(
-                    value = sliderValue.coerceIn(device.volumeRange.start, device.volumeRange.endInclusive),
-                    onValueChange = { newValue ->
-                        sliderValue = newValue
-                        val quantized = if (device.volumeRange.endInclusive <= 1f) {
-                            (newValue * 20).toInt()
-                        } else {
-                            newValue.toInt()
-                        }
-                        if (quantized != lastStep) {
-                            lastStep = quantized
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
-                        onVolumeChange(newValue)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = device.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (device.isConnecting && device.isRemote) {
+                        stringResource(R.string.cast_connecting_ellipsis)
+                    } else {
+                        listOf(device.subtitle, device.connectionLabel).filter { it.isNotBlank() }.joinToString(" · ")
                     },
-                    valueRange = device.volumeRange,
-                    colors = SliderDefaults.colors(
-                        activeTrackColor = MaterialTheme.colorScheme.tertiary,
-                        inactiveTrackColor = MaterialTheme.colorScheme.tertiary.copy(alpha = MeloAlpha.Divider),
-                        thumbColor = MaterialTheme.colorScheme.onTertiary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+            if (device.isRemote) {
+                MeloButton(
+                    text = stringResource(R.string.cast_disconnect),
+                    onClick = onDisconnect,
+                    enabled = !device.isConnecting,
+                    size = MeloButtonSize.Medium,
+                    style = MeloButtonStyle.Tonal,
+                )
+            }
+        }
+
+        val volumeLabel = if (device.isRemote) stringResource(R.string.cast_volume_device) else stringResource(R.string.cast_volume_phone)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(MeloIcons.VolumeDown, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            val interactionSource = remember { MutableInteractionSource() }
+            val sliderColors = SliderDefaults.colors(
+                activeTrackColor = colors.onSurface,
+                inactiveTrackColor = colors.onSurface.copy(alpha = 0.16f),
+                thumbColor = colors.onSurface
+            )
+            val sliderState = remember(device.volumeRange) { SliderState(device.volumeRange.start, 0, device.volumeRange) }
+            sliderState.value = sliderValue.coerceIn(device.volumeRange.start, device.volumeRange.endInclusive)
+            Slider(
+                state = sliderState,
+                onValueChange = { newValue: Float ->
+                    sliderValue = newValue
+                    val quantized = if (device.volumeRange.endInclusive <= 1f) (newValue * 20).toInt() else newValue.toInt()
+                    if (quantized != lastStep) {
+                        lastStep = quantized
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                    onVolumeChange(newValue)
+                },
+                interactionSource = interactionSource,
+                colors = sliderColors,
+                // A thin track and a small round thumb, like the player's seek bar.
+                thumb = { _: SliderState ->
+                    Box(
+                        Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(colors.onSurface)
+                    )
+                },
+                track = { state: SliderState ->
+                    SliderDefaults.Track(
+                        sliderState = state,
+                        modifier = Modifier.height(4.dp),
+                        colors = sliderColors,
+                        drawStopIndicator = null,
+                        thumbTrackGapSize = 0.dp,
+                        trackInsideCornerSize = 2.dp
+                    )
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { contentDescription = "$volumeLabel ${buildVolumeLabel(sliderValue, device.volumeRange.endInclusive)}" }
+            )
+            Icon(MeloIcons.VolumeUp, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -1444,18 +1430,19 @@ private fun buildVolumeLabel(value: Float, max: Float): String {
 
 @Composable
 private fun EmptyDeviceState() {
-    MeloCard(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = MeloLayout.PanelShape,
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MeloLayout.CardShape)
+            .background(MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = Icons.Filled.Devices,
+                imageVector = MeloIcons.Devices,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(36.dp)
@@ -1509,10 +1496,10 @@ private fun CastDeviceRow(
     )
 
     val deviceIcon = when (device.deviceType) {
-        MediaRouter.RouteInfo.DEVICE_TYPE_TV -> Icons.Rounded.Tv
-        MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER, MediaRouter.RouteInfo.DEVICE_TYPE_BUILTIN_SPEAKER -> Icons.Rounded.Speaker
-        MediaRouter.RouteInfo.DEVICE_TYPE_BLUETOOTH_A2DP -> Icons.Rounded.Bluetooth
-        else -> Icons.Filled.Cast
+        MediaRouter.RouteInfo.DEVICE_TYPE_TV -> MeloIcons.Tv
+        MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER, MediaRouter.RouteInfo.DEVICE_TYPE_BUILTIN_SPEAKER -> MeloIcons.Speaker
+        MediaRouter.RouteInfo.DEVICE_TYPE_BLUETOOTH_A2DP -> MeloIcons.Headphones
+        else -> MeloIcons.Cast
     }
 
     Surface(
@@ -1642,14 +1629,14 @@ private fun BluetoothMetricIndicator(
     ) {
         if (batteryPercent != null) {
             Icon(
-                imageVector = Icons.Rounded.BatteryFull,
+                imageVector = MeloIcons.BatteryFull,
                 contentDescription = stringResource(R.string.cast_cd_battery),
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
             )
         } else {
             Icon(
-                painter = painterResource(R.drawable.rounded_volume_up_24),
+                painter = meloPainter(R.drawable.rounded_volume_up_24),
                 contentDescription = stringResource(R.string.cast_cd_volume_level),
                 tint = contentColor,
                 modifier = Modifier.size(14.dp)
@@ -1687,7 +1674,7 @@ private fun BadgeChip(
         horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space2)
     ) {
         when {
-            icon != null -> Icon(painterResource(id = icon), contentDescription = null, tint = contentColor, modifier = Modifier.size(16.dp))
+            icon != null -> Icon(meloPainter(id = icon), contentDescription = null, tint = contentColor, modifier = Modifier.size(16.dp))
             iconVector != null -> Icon(iconVector, contentDescription = null, tint = contentColor, modifier = Modifier.size(16.dp))
         }
         Text(
@@ -1721,7 +1708,7 @@ private fun QuickSettingsRow(
                 wifiConnected -> stringResource(R.string.cast_wifi_connected)
                 else -> stringResource(R.string.cast_wifi_on)
             },
-            icon = if (wifiOn) Icons.Rounded.Wifi else Icons.Rounded.WifiOff,
+            icon = if (wifiOn) MeloIcons.Wifi else MeloIcons.WifiOff,
             isActive = wifiOn,
             onClick = onWifiClick,
             modifier = Modifier.weight(1f)
@@ -1731,7 +1718,7 @@ private fun QuickSettingsRow(
             subtitle = if (bluetoothEnabled) {
                 if (!bluetoothName.isNullOrEmpty()) stringResource(R.string.cast_bt_connected) else stringResource(R.string.cast_bt_on)
             } else stringResource(R.string.cast_bt_off),
-            icon = if (bluetoothEnabled) Icons.Rounded.Bluetooth else Icons.Rounded.BluetoothDisabled,
+            icon = if (bluetoothEnabled) MeloIcons.Bluetooth else MeloIcons.BluetoothDisabled,
             isActive = bluetoothEnabled,
             onClick = onBluetoothClick,
             modifier = Modifier.weight(1f)
@@ -1748,20 +1735,6 @@ private fun QuickSettingTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Definimos la forma específica para el estado activo
-    val activeShape = remember {
-        AbsoluteSmoothCornerShape(
-            cornerRadiusTL = 18.dp,
-            cornerRadiusTR = 18.dp,
-            cornerRadiusBL = 18.dp,
-            cornerRadiusBR = 18.dp,
-            smoothnessAsPercentTL = 70,
-            smoothnessAsPercentTR = 70,
-            smoothnessAsPercentBL = 70,
-            smoothnessAsPercentBR = 70
-        )
-    }
-
     // El fondo del Tile ahora siempre es surface, pero mantenemos una transición suave si quisieras cambiarlo levemente
     val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
     val contentColor = MaterialTheme.colorScheme.onSurface
@@ -1778,9 +1751,9 @@ private fun QuickSettingTile(
 
     Surface(
         modifier = modifier
-            .height(72.dp)
-            // Aquí alternamos la forma según el estado
-            .clip(if (isActive) activeShape else CircleShape)
+            .height(64.dp)
+            // One shape on and off; the icon disc alone says which state the radio is in.
+            .clip(MeloLayout.CardShape)
             .clickable(onClick = onClick),
         color = containerColor,
         contentColor = contentColor
@@ -1793,7 +1766,7 @@ private fun QuickSettingTile(
             // El contenedor del icono es el que lleva el color primario ahora
             Box(
                 modifier = Modifier
-                    .size(40.dp) // Un poco más grande para lucir la forma y el color
+                    .size(36.dp)
                     .clip(CircleShape)
                     .background(iconBoxColor),
                 contentAlignment = Alignment.Center
@@ -1812,7 +1785,7 @@ private fun QuickSettingTile(
             ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

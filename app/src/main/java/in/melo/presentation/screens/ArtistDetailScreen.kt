@@ -1,5 +1,13 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.backdrop.backdrops.LayerBackdrop
+import `in`.melo.ui.glass.backdrop.backdrops.layerBackdrop
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import `in`.melo.ui.glass.pressShade
+import `in`.melo.ui.glass.pressSink
+import `in`.melo.ui.glass.rememberPressDent
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.data.source
 import `in`.melo.presentation.components.MusicOptionsHost
@@ -20,20 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.rounded.Album
-import androidx.compose.material.icons.rounded.AddAPhoto
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Headphones
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,11 +71,6 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import androidx.compose.ui.res.stringResource
 import `in`.melo.ui.theme.MeloStatusBarStyle
 import `in`.melo.utils.formatSongCount
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.PushPin
-import androidx.compose.material.icons.rounded.Radio
 import androidx.navigation.NavHostController
 import `in`.melo.MeloModel
 import `in`.melo.data.Music
@@ -151,13 +140,9 @@ fun ArtistDetailScreen(
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
     val isDarkTheme = LocalMeloDarkTheme.current
-    val baseColorScheme = MaterialTheme.colorScheme
-    val artistColorSchemePair by remember(current.imageUrl) {
-        ui.getAlbumColorSchemeFlow(current.imageUrl.orEmpty())
-    }.collectAsStateWithLifecycle()
-    val artistColorScheme = remember(artistColorSchemePair, isDarkTheme) {
-        artistColorSchemePair?.let { pair -> if (isDarkTheme) pair.dark else pair.light } ?: baseColorScheme
-    }
+    val pageSettings by ui.settings.collectAsStateWithLifecycle()
+    val pagePalette = rememberPagePalette(current.imageUrl?.takeIf { pageSettings.detailPageTint && it.isNotBlank() }, isDarkTheme)
+    val baseColorScheme = if (pageSettings.detailPageTint) MaterialTheme.colorScheme.tintedBy(pagePalette) else MaterialTheme.colorScheme
     LaunchedEffect(Unit) {
         ui.collapsePlayerSheet()
     }
@@ -240,7 +225,7 @@ fun ArtistDetailScreen(
     }
     // --- Fin de la lógica del Header ---
 
-    // Keep the page canvas consistent while the artist artwork supplies its color.
+    // The page in the artist picture's colours (Settings → Album and playlist pages).
     MaterialTheme(
         colorScheme = baseColorScheme,
         typography = MaterialTheme.typography,
@@ -278,22 +263,30 @@ fun ArtistDetailScreen(
             val currentTopBarHeightDp = with(density) { topBarHeight.value.toDp() }
             val showScrollBar = LocalShowScrollbar.current && collapseFraction > 0.95f &&
                 (lazyListState.canScrollForward || lazyListState.canScrollBackward)
+            val listBackdrop = rememberPageBackdrop(blurAllowed = !pageSettings.disableBlur)
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(if (listBackdrop != null) Modifier.layerBackdrop(listBackdrop) else Modifier)
                     .offset {
                         val extraHeight = (topBarHeight.value - minTopBarHeightPx).roundToInt()
                         IntOffset(0, extraHeight)
                     },
                 contentPadding = PaddingValues(
                     top = minTopBarHeight + 8.dp,
-                    start = 16.dp,
-                    end = if (showScrollBar) 24.dp else 16.dp,
+                    // Rows carry their own 16dp inset so artwork lines up with the title.
+                    start = 0.dp,
+                    end = if (showScrollBar) 8.dp else 0.dp,
                     bottom = MiniPlayerHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 8.dp
                 ),
             ) {
                 item(key = "artist_actions") {
+                    DetailPlayRow(
+                        onPlay = { songs.firstOrNull()?.let { ui.playSongs(songs, it, artist.name) } },
+                        onShuffle = { ui.playSongsShuffled(songs, artist.name) },
+                        enabled = songs.isNotEmpty(),
+                    )
                     DetailActionsRow(
                         item = current,
                         canSave = current.source == `in`.melo.data.MusicSource.Spotify,
@@ -310,7 +303,7 @@ fun ArtistDetailScreen(
                     item(key = "artist_listeners") {
                         Text(
                             stringResource(R.string.artist_monthly_listeners, numbers(listeners)),
-                            Modifier.padding(start = 4.dp, bottom = 8.dp),
+                            Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -353,7 +346,7 @@ fun ArtistDetailScreen(
                         ) }
                     }
                     if (list.size > SECTION_PREVIEW) item(key = "artist_section_more_$title") {
-                        androidx.compose.material3.TextButton(onClick = { expanded[title] = !open }) {
+                        androidx.compose.material3.TextButton(modifier = Modifier.padding(start = 4.dp), onClick = { expanded[title] = !open }) {
                             Text(if (open) stringResource(R.string.artist_show_less) else stringResource(R.string.artist_show_all, list.size))
                         }
                     }
@@ -371,7 +364,7 @@ fun ArtistDetailScreen(
                 }
                 if (artists.size > SECTION_PREVIEW) item(key = "artist_related_more") {
                     val similarOpen = expanded[R.string.similar_artists] == true
-                    androidx.compose.material3.TextButton(onClick = { expanded[R.string.similar_artists] = !similarOpen }) {
+                    androidx.compose.material3.TextButton(modifier = Modifier.padding(start = 4.dp), onClick = { expanded[R.string.similar_artists] = !similarOpen }) {
                         Text(if (similarOpen) stringResource(R.string.artist_show_less) else stringResource(R.string.artist_show_all, artists.size))
                     }
                 }
@@ -395,8 +388,9 @@ fun ArtistDetailScreen(
                 collapseFraction = collapseFraction,
                 headerHeight = currentTopBarHeightDp,
                 headerImageRequestSize = headerImageRequestSize,
+                artTopLuminance = pagePalette.topLuminance,
+                listBackdrop = listBackdrop,
                 onBackPressed = { navController.popBackStack() },
-                onPlayClick = { ui.playSongsShuffled(songs, artist.name) },
             )
         }
     }
@@ -410,11 +404,9 @@ private const val SECTION_PREVIEW = 6
 
 @Composable
 private fun ArtistSectionTitle(text: String) {
-    Text(
+    `in`.melo.presentation.components.MeloSectionHeader(
         text,
-        Modifier.padding(top = 16.dp, bottom = 8.dp, start = 4.dp),
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.SemiBold,
+        Modifier.padding(top = `in`.melo.ui.theme.MeloLayout.Space2),
     )
 }
 
@@ -425,7 +417,7 @@ private fun ArtistAbout(biography: String?, listeners: String?, rank: Int?, imag
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         ArtistSectionTitle(stringResource(R.string.artist_about))
         Surface(shape = MeloLayout.PanelShape, color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.fillMaxWidth().clickable(enabled = biography != null) { open = !open }) {
+            modifier = Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter).clickable(enabled = biography != null) { open = !open }) {
             Column {
                 if (image != null) `in`.melo.presentation.components.SmartImage(
                     model = image, contentDescription = null,
@@ -490,8 +482,8 @@ private fun ArtistAlbumSectionSongItem(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = MeloAlpha.Tertiary), containerShape)
-            .padding(horizontal = 8.dp)
+            // A plain list like the albums below it, so both line up on the page gutter.
+            .clip(containerShape)
     ) {
         Column {
             if (songIndex > 0) {
@@ -526,18 +518,18 @@ private fun CustomCollapsingTopBar(
     collapseFraction: Float, // 0.0 = expandido, 1.0 = colapsado
     headerHeight: Dp,
     headerImageRequestSize: Size,
+    /** How bright the picture's top band is, for the back button's tone; null until read. */
+    artTopLuminance: Float?,
+    listBackdrop: LayerBackdrop?,
     onBackPressed: () -> Unit,
-    onPlayClick: () -> Unit,
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
-    val statusBarColor = if (LocalMeloDarkTheme.current) {
-        MaterialTheme.colorScheme.background.copy(alpha = MeloAlpha.Scrim)
-    } else {
-        MaterialTheme.colorScheme.surface.copy(alpha = MeloAlpha.Disabled)
-    }
+    // The bar's tone: over the open header, the cover's top band decides; folded, the page does.
+    val pageDark = LocalMeloDarkTheme.current
+    val chromeDark = if (collapseFraction < 0.5f && artTopLuminance != null) artTopLuminance < 0.4f else pageDark
+    val statusBarColor = if (chromeDark) Color.Black.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.30f)
 
     // --- Animation Values ---
-    val fabScale = 1f - collapseFraction
     val backgroundAlpha = collapseFraction
     val headerContentAlpha = 1f - (collapseFraction * 2).coerceAtMost(1f)
     val showExpandedArtwork = headerContentAlpha > 0.01f
@@ -569,7 +561,7 @@ private fun CustomCollapsingTopBar(
 
     // Title animation
     val titleScale = lerp(1f, 0.75f, collapseFraction)
-    val titlePaddingStart = lerp(24.dp, 58.dp, collapseFraction)
+    val titlePaddingStart = lerp(16.dp, 58.dp, collapseFraction)
     val titleMaxLines = if(collapseFraction < 0.5f) 2 else 1
     val titleVerticalBias = lerp(1f, -1f, collapseFraction)
     val animatedTitleAlignment = BiasAlignment(horizontalBias = -1f, verticalBias = titleVerticalBias)
@@ -583,14 +575,15 @@ private fun CustomCollapsingTopBar(
             .height(headerHeight)
             .clipToBounds()
     ) {
-        MeloStatusBarStyle(color = fallbackStatusBarColor)
+        MeloStatusBarStyle(color = fallbackStatusBarColor, useDarkIcons = !chromeDark)
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(headerHeight)
-                .background(surfaceColor.copy(alpha = backgroundAlpha))
         ) {
+            // Its own layer: the frost fades in with the fold without fading the header with it.
+            Box(Modifier.matchParentSize().foldedBar(listBackdrop, surfaceColor, backgroundAlpha))
             if (showExpandedArtwork) {
                 val displayUrl = effectiveImageUrl?.takeIf { it.isNotBlank() }
                 if (!displayUrl.isNullOrEmpty()) {
@@ -606,6 +599,7 @@ private fun CustomCollapsingTopBar(
                         alpha = headerContentAlpha,
                         modifier = Modifier.fillMaxSize()
                     )
+                    if (listBackdrop != null) CoverEdgeBlur(displayUrl, headerImageRequestSize, headerContentAlpha)
                 } else {
                     MusicIconPattern(
                         modifier = Modifier
@@ -631,13 +625,16 @@ private fun CustomCollapsingTopBar(
                     .fillMaxSize()
                     .statusBarsPadding()
             ) {
-                MeloIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.common_back),
-                    onClick = onBackPressed,
-                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 4.dp),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                )
+                // Floats over the cover in glass; its glyph turns white or black with what is
+                // behind it, the cover while the header is open and the page once it has folded.
+                ChromeTheme(dark = chromeDark) {
+                    GlassCircleButton(
+                        icon = MeloIcons.ArrowBack,
+                        contentDescription = stringResource(R.string.common_back),
+                        onClick = onBackPressed,
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 6.dp),
+                    )
+                }
 
 
 
@@ -661,9 +658,7 @@ private fun CustomCollapsingTopBar(
                     ) {
                         Text(
                             text = artist.name,
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                textGeometricTransform = TextGeometricTransform(scaleX = 1.2f),
-                            ),
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = titleMaxLines,
@@ -680,24 +675,6 @@ private fun CustomCollapsingTopBar(
                     }
                 }
 
-                // Botón de Play
-                LargeExtendedFloatingActionButton(
-                    onClick = onPlayClick,
-                    shape = DetailFabShape,
-                    // Shadows of concave outlines are re-tessellated by the renderer on every
-                    // frame: with this 360-point star it saturates it and freezes the UI.
-                    elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                        .graphicsLayer {
-                            scaleX = fabScale
-                            scaleY = fabScale
-                            alpha = fabScale
-                        }
-                ) {
-                    Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.common_shuffle_play_album))
-                }
             }
         }
     }
@@ -710,7 +687,7 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
 
     Box(modifier = modifier.background(MaterialTheme.colorScheme.primaryContainer)) {
         Icon(
-            imageVector = Icons.Rounded.MusicNote,
+            imageVector = MeloIcons.MusicNote,
             contentDescription = null, tint = color1,
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -719,7 +696,7 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
                 .graphicsLayer { rotationZ = -12f }
         )
         Icon(
-            imageVector = Icons.Default.GraphicEq,
+            imageVector = MeloIcons.GraphicEq,
             contentDescription = null, tint = color1,
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -728,7 +705,7 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
                 .graphicsLayer { rotationZ = 18f }
         )
         Icon(
-            imageVector = Icons.Rounded.Album,
+            imageVector = MeloIcons.Album,
             contentDescription = null, tint = color2,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
@@ -737,7 +714,7 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
                 .graphicsLayer { rotationZ = 12f }
         )
         Icon(
-            imageVector = Icons.Rounded.Mic,
+            imageVector = MeloIcons.Mic,
             contentDescription = null, tint = color1,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -746,7 +723,7 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
                 .graphicsLayer { rotationZ = 14f }
         )
         Icon(
-            imageVector = Icons.Rounded.SurroundSound,
+            imageVector = MeloIcons.SurroundSound,
             contentDescription = null, tint = color2,
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -755,7 +732,7 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
                 .graphicsLayer { rotationZ = 10f }
         )
         Icon(
-            imageVector = Icons.Rounded.MusicNote,
+            imageVector = MeloIcons.MusicNote,
             contentDescription = null, tint = color1,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -764,7 +741,7 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
                 .graphicsLayer { rotationZ = -18f }
         )
         Icon(
-            imageVector = Icons.Rounded.Headphones,
+            imageVector = MeloIcons.Headphones,
             contentDescription = null, tint = color2,
             modifier = Modifier
                 .align(Alignment.Center)

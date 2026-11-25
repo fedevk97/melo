@@ -1,5 +1,9 @@
 package `in`.melo.update
 
+import `in`.melo.presentation.components.MeloButton
+import `in`.melo.presentation.components.MeloButtonSize
+import `in`.melo.presentation.components.MeloButtonStyle
+import `in`.melo.ui.glass.MeloAlertDialog
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -14,7 +18,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -45,10 +48,10 @@ internal fun UpdatePrompt() {
     val state by updater.state.collectAsStateWithLifecycle()
     if (state == UpdateState.Idle) return
     if (state == UpdateState.Unconfigured) {
-        AlertDialog(onDismissRequest = updater::dismiss,
+        MeloAlertDialog(onDismissRequest = updater::dismiss,
             title = { Text(stringResource(R.string.update_settings_title)) },
             text = { Text(stringResource(R.string.melo_updates_unavailable)) },
-            confirmButton = { TextButton(onClick = updater::dismiss) { Text(stringResource(R.string.update_close)) } })
+            confirmButton = { MeloButton(text = stringResource(R.string.update_close), onClick = updater::dismiss, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium) })
         return
     }
     val installer = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
@@ -96,7 +99,7 @@ internal fun UpdatePrompt() {
         UpdateState.CommunityInvite -> R.string.community_invite_title
         else -> R.string.update_available
     }
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = updater::dismiss,
         title = { Text(stringResource(title)) },
         text = {
@@ -140,15 +143,15 @@ internal fun UpdatePrompt() {
             when (val current = state) {
                 is UpdateState.Available -> {
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                        Button(
+                        MeloButton(
+                            text = stringResource(if (current.release.apk != null) R.string.update_download_now else R.string.update_release_page),
                             onClick = { if (current.release.apk != null) updater.download(current.release) else openRelease() },
                             modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(if (current.release.apk != null) R.string.update_download_now else R.string.update_release_page))
-                        }
+                            size = MeloButtonSize.Medium,
+                        )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            TextButton(onClick = updater::dismiss) { Text(stringResource(R.string.update_later)) }
-                            TextButton(onClick = updater::dontRemindToday) { Text(stringResource(R.string.update_dont_remind_today)) }
+                            MeloButton(text = stringResource(R.string.update_later), onClick = updater::dismiss, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium)
+                            MeloButton(text = stringResource(R.string.update_dont_remind_today), onClick = updater::dontRemindToday, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium)
                         }
                     }
                 }
@@ -156,14 +159,15 @@ internal fun UpdatePrompt() {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Button(onClick = ::joinDiscord, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.community_invite_join))
-                    }
-                    TextButton(onClick = updater::dismiss) {
-                        Text(stringResource(R.string.community_invite_later))
-                    }
+                    MeloButton(
+                        text = stringResource(R.string.community_invite_join),
+                        onClick = ::joinDiscord,
+                        modifier = Modifier.fillMaxWidth(),
+                        size = MeloButtonSize.Medium,
+                    )
+                    MeloButton(text = stringResource(R.string.community_invite_later), onClick = updater::dismiss, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium)
                 }
-                is UpdateState.Ready -> TextButton(onClick = {
+                is UpdateState.Ready -> MeloButton(text = stringResource(R.string.update_install), size = MeloButtonSize.Medium, onClick = {
                     try {
                         if (!context.packageManager.canRequestPackageInstalls()) {
                             installPermission.launch(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
@@ -171,22 +175,22 @@ internal fun UpdatePrompt() {
                             launchInstaller(current)
                         }
                     } catch (_: Exception) { updater.installerFailed() }
-                }) { Text(stringResource(R.string.update_install)) }
-                is UpdateState.Failed -> TextButton(onClick = { current.release?.let(updater::download) ?: updater.check(manual = true) }) {
-                    Text(stringResource(R.string.update_retry))
-                }
-                UpdateState.Current, is UpdateState.Notes -> TextButton(onClick = updater::dismiss) { Text(stringResource(R.string.update_close)) }
+                })
+                is UpdateState.Failed -> MeloButton(
+                    text = stringResource(R.string.update_retry),
+                    onClick = { current.release?.let(updater::download) ?: updater.check(manual = true) },
+                    size = MeloButtonSize.Medium,
+                )
+                UpdateState.Current, is UpdateState.Notes -> MeloButton(text = stringResource(R.string.update_close), onClick = updater::dismiss, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium)
                 else -> Unit
             }
         },
         dismissButton = {
             when (state) {
-                is UpdateState.Downloading, UpdateState.Checking -> TextButton(onClick = updater::dismiss) {
-                    Text(stringResource(R.string.update_cancel))
-                }
+                is UpdateState.Downloading, UpdateState.Checking -> MeloButton(text = stringResource(R.string.update_cancel), onClick = updater::dismiss, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium)
                 is UpdateState.Failed -> Row {
-                    TextButton(onClick = updater::dismiss) { Text(stringResource(R.string.update_close)) }
-                    TextButton(onClick = ::openRelease) { Text(stringResource(R.string.update_release_page)) }
+                    MeloButton(text = stringResource(R.string.update_close), onClick = updater::dismiss, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium)
+                    MeloButton(text = stringResource(R.string.update_release_page), onClick = ::openRelease, style = MeloButtonStyle.Text, size = MeloButtonSize.Medium)
                 }
                 else -> Unit
             }

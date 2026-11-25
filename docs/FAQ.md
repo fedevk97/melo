@@ -2,27 +2,23 @@
 
 ## Do I need a Spotify account?
 
-No. Without an account, Melo plays the YouTube Music catalog and the audio files on your phone, and Spotify tracks of imported playlists play from their closest YouTube Music match. With an account, it shows your Spotify library and plays what your account is allowed to play. Free and Premium accounts have been tested, including playlists and offline playback. Free accounts play AAC 128 kbit/s; Premium also plays AAC 256 kbit/s. If something fails with your account, Settings → Diagnostic report gives a text to attach to a bug report.
+No. Without an account, Melo plays the YouTube Music catalog and the audio files on your phone, and Spotify tracks of imported playlists play from their closest YouTube Music match. With an account, it also shows your Spotify library and playlists. Spotify supplies the catalogue and your library; every Spotify track plays from its YouTube Music match, with a Free or a Premium account alike. If something fails with your account, Settings → Diagnostic report gives a text to attach to a bug report.
 
 ## Do I need the official Spotify app installed?
 
-No. Melo does not use the installed app. Spotify's audio engine, taken unchanged from the official APK, is packaged inside Melo.
+No. Melo does not use the installed app, and it contains no part of it.
 
 ## Where do I get the APK?
 
-From the [latest release](https://github.com/aarush-io/melo/releases/latest). Each release lists the SHA-256 of the APK and a signing-certificate report. You can also build it yourself from the source and your own copy of the official APKM: see [Build from source](BUILDING.md). A build you made yourself is signed with a different key, so uninstall the other one first (this erases the session and downloads).
+From the [latest release](https://github.com/aarush-io/melo/releases/latest). Each release lists the SHA-256 of the APK and a signing-certificate report. You can also build it yourself from the source: see [Build from source](BUILDING.md). A build you made yourself is signed with a different key, so uninstall the other one first (this erases the session and downloads).
 
 ## How do application updates work?
 
 Melo checks GitHub at startup. A newer release opens a dialog with release notes and a download button. Android confirms the installation. If you dismiss the dialog, the same release is offered again at the first startup at least 24 hours later. Settings → Check for updates checks immediately.
 
-## Which Spotify version is needed?
-
-Exactly 9.2.0.26 (build 148373686), ARM64. The build checks the SHA-256 of the extracted files and stops if they differ.
-
 ## Does it work on x86 emulators or 32-bit phones?
 
-No. The engine is ARM64 only.
+Yes. Melo runs on every Android ABI: 64-bit and 32-bit ARM, x86 and x86_64.
 
 ## How do I sign in?
 
@@ -46,7 +42,7 @@ Yes. On the playlist's page, ⋮ → Convert to…, then choose Spotify, YouTube
 
 ## How does offline playback work?
 
-Download an album, a playlist or a track from its page. Recently played and upcoming tracks are also kept in a cache you can size in Settings → Cached storage. Audio stays encrypted on the device. The offline mode switch stops all network access from the app.
+Download an album, a playlist or a track from its page. Recently played and upcoming tracks are also kept in a cache you can size in Settings → Cached storage. Audio stays in the app's private storage. The offline mode switch stops all network access from the app.
 
 ## Can I use Melo to save MP3 files or skip Premium?
 

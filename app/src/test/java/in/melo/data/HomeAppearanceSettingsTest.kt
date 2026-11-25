@@ -13,19 +13,13 @@ class HomeAppearanceSettingsTest {
         assertEquals(3, settings.homeDialRows)
         assertTrue(settings.homeArtistDialEnabled)
         assertTrue(settings.homeGradients)
-        assertTrue(settings.surfaceGradients)
-        assertTrue(settings.homePressMotion)
-        assertTrue(settings.homeLoadingAnimations)
         assertTrue(settings.playerArtworkGradient)
     }
 
     @Test fun disabledEffectsSurviveSavingAndReloading() {
-        val settings = AppSettings(homeGradients = false, surfaceGradients = false, homePressMotion = false, homeLoadingAnimations = false, playerArtworkGradient = false)
+        val settings = AppSettings(homeGradients = false, playerArtworkGradient = false)
         val restored = AppSettings.fromJson(JSONObject(settings.toJson().toString()))
         assertFalse(restored.homeGradients)
-        assertFalse(restored.surfaceGradients)
-        assertFalse(restored.homePressMotion)
-        assertFalse(restored.homeLoadingAnimations)
         assertFalse(restored.playerArtworkGradient)
         assertEquals(settings.homeDialRows, restored.homeDialRows)
         assertEquals(settings.homeDialTileStyle, restored.homeDialTileStyle)

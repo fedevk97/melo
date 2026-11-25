@@ -1,198 +1,173 @@
 package `in`.melo.data
 
 import android.content.Context
-import `in`.melo.playback.SpotifyNativeRuntime
-import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-/** The Android RootlistModificationService/PlaylistService contracts from 9.2.0.26. */
+/**
+ * Playlist writes over Playlist4 HTTP: `ListChanges` deltas posted to `playlist/v2/playlist/{id}/changes`
+ * for a playlist's items and attributes, and to `playlist/v2/user/{username}/rootlist/changes` for the
+ * account's list of playlists (create, publish, unfollow). See protocol/06-playlist-writes.md.
+ */
 internal class SpotifyPlaylists(private val context: Context) : AutoCloseable {
-    private val lock = Mutex()
-    private var runtime: SpotifyNativeRuntime? = null
-    private var runtimeSession: SpotifySession? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val accountListener = SpotifyAccount.onSessionReplaced {
-        scope.launch { lock.withLock { runtime?.close(); runtime = null; runtimeSession = null } }
+    override fun close() = Unit
+
+    private suspend fun session(): SpotifySession {
+        if (!NetworkMonitor.online.value) throw SpotifyFailure("Sign in to edit a Spotify playlist.")
+        return SpotifyAccount.require(context)
     }
-    private suspend fun request(service: String, method: String, body: ByteArray): Proto = withContext(Dispatchers.IO) {
-        val account = SpotifyAccount.require(context)
-        lock.withLock {
-            if (runtimeSession !== account) { runtime?.close(); runtime = null; runtimeSession = null }
-            val current = runtime ?: SpotifyNativeRuntime.open(context).also { runtime = it; runtimeSession = account }
-            current.serviceRequest(service, method, body)
+
+    private fun playlistPath(uri: String) = "playlist/v2/playlist/${playlistUri(uri).substringAfterLast(':')}"
+    private suspend fun rootlistPath(session: SpotifySession) = "playlist/v2/user/${session.username()}/rootlist"
+
+    /** The playlist's head: revision, length and owner, without items. */
+    private suspend fun head(session: SpotifySession, uri: String, operation: String): Proto {
+        val url = spotifyUrl(playlistPath(uri)).newBuilder()
+            .addQueryParameter("from", "0").addQueryParameter("length", "0")
+            .addQueryParameter("decorate", "revision,length,owner").build()
+        return Proto(authenticatedSpotifyRequest(SpotifyAccount.transport, session, url, operation))
+    }
+
+    private suspend fun postChanges(session: SpotifySession, path: String, changes: ByteArray, operation: String): Proto =
+        Proto(authenticatedSpotifyRequest(SpotifyAccount.transport, session, spotifyUrl("$path/changes"), operation, changes))
+
+    /** A write based on a revision another client has since moved past (409) is read and sent once more. */
+    private suspend fun <T> retryOnConflict(block: suspend () -> T): T = try { block() }
+    catch (failure: SpotifyFailure) { if (failure.status != 409) throw failure; block() }
+
+    /** Applies [ops] to a playlist at its current revision. */
+    private suspend fun changePlaylist(uri: String, operation: String, ops: List<ByteArray>) {
+        val session = session()
+        retryOnConflict {
+            val revision = head(session, uri, operation).bytes(1)
+            postChanges(session, playlistPath(uri), listChanges(revision, ops, session.username()), operation)
         }
     }
-    override fun close() {
-        accountListener.close()
-        scope.launch { lock.withLock { runtime?.close(); runtime = null; runtimeSession = null }; scope.cancel() }
-    }
-    private suspend fun modify(service: String, request: ByteArray): Proto {
-        if (!NetworkMonitor.online.value) throw SpotifyFailure("Sign in to edit a Spotify playlist.")
-        val response = request("spotify.playlist_esperanto.proto.$service", "Modify", request)
-        val status = response.message(1)?.number(1)
-        if (status !in 200..299) throw SpotifyFailure("Spotify rejected the playlist change (code $status): ${response.message(1)?.text(2).orEmpty()}", status)
-        return response
-    }
+
     suspend fun create(name: String, tracks: List<Music> = emptyList(), published: Boolean = false): Music {
         val clean = name.trim()
         require(clean.isNotEmpty() && clean.length <= 100) { "The name must be between 1 and 100 characters." }
         val uris = spotifyTracks(tracks)
-        val response = modify("RootlistModificationService", createPlaylistRequest(clean, uris))
-        val uri = response.message(2)?.text(2)?.let(::canonicalMusicUri)?.takeIf { it.startsWith("spotify:playlist:") }
+        val session = session()
+        val reply = Proto(authenticatedSpotifyRequest(SpotifyAccount.transport, session, spotifyUrl("playlist/v2/playlist"),
+            "New playlist", createPlaylistRequest(clean)))
+        val uri = reply.text(1)?.let(::canonicalMusicUri)?.takeIf { it.startsWith("spotify:playlist:") }
             ?: throw SpotifyFailure("Spotify did not return the new playlist.")
-        val result = Music(uri, clean, `in`.melo.utils.formatSongCount(uris.size), MusicKind.Playlist, ownerUsername = SpotifyAccount.require(context).username())
-        // Publication is a rootlist property, independent of collaborative/private access.
-        setPublished(uri, published)
-        // Modify acknowledges the local native transaction. Keep its owner alive until the
-        // backend exposes the new list, otherwise shutdown can abandon synchronization.
-        val session = SpotifyAccount.require(context)
-        withTimeout(30_000) {
-            while (true) {
-                try {
-                    authenticatedSpotifyRequest(SpotifyAccount.transport, session,
-                        spotifyUrl("playlist/v2/playlist/${uri.substringAfterLast(':')}").newBuilder().addQueryParameter("length", "0").build(), "New playlist")
-                    break
-                } catch (failure: SpotifyFailure) { if (failure.status != 404) throw failure }
-                delay(500)
-            }
+        // A new list is in nobody's library until the rootlist holds it: put it first, as the apps do.
+        retryOnConflict {
+            postChanges(session, rootlistPath(session), listChanges(rootRevision(session),
+                listOf(addOp(listOf(uri), first = true, public = published)), session.username()), "New playlist")
         }
-        return result
+        uris.chunked(ADD_CHUNK).forEach { chunk -> changePlaylist(uri, "New playlist", listOf(addOp(chunk))) }
+        return Music(uri, clean, `in`.melo.utils.formatSongCount(uris.size), MusicKind.Playlist, ownerUsername = session.username())
     }
+
     suspend fun rename(uri: String, name: String) {
         val clean = name.trim()
         require(clean.isNotEmpty() && clean.length <= 100)
-        setAttributes(uri, proto { writeString(3, clean) })
+        changePlaylist(uri, "Rename playlist", listOf(updateListAttributesOp(proto { writeString(1, clean) })))
     }
-    private suspend fun rootEntry(uri: String): Pair<String, Boolean>? {
+
+    /** The playlist's row in the rootlist: its index, the revision it was read at, its URI as stored, and its `public` flag. */
+    private class RootEntry(val index: Int, val revision: ByteArray?, val uri: String, val public: Boolean)
+
+    private suspend fun rootEntry(session: SpotifySession, uri: String): RootEntry? {
         val target = playlistUri(uri)
-        val session = SpotifyAccount.require(context)
-        val username = session.username()
         var offset = 0
         while (true) {
-            val url = spotifyUrl("playlist/v2/user").newBuilder().addPathSegment(username).addPathSegment("rootlist")
+            val url = spotifyUrl(rootlistPath(session)).newBuilder()
+                .addQueryParameter("decorate", "revision,length")
                 .addQueryParameter("from", offset.toString()).addQueryParameter("length", "300").build()
             val response = Proto(authenticatedSpotifyRequest(SpotifyAccount.transport, session, url, "Spotify library"))
             val contents = response.message(5) ?: return null
             val items = contents.messages(3)
-            items.firstOrNull { entry -> entry.text(1)?.let(::canonicalMusicUri) == target }?.let { row ->
-                return checkNotNull(row.text(1)) to (row.message(2)?.number(10) == 1)
+            val start = contents.number(1) ?: offset
+            items.withIndex().firstOrNull { (_, entry) -> entry.text(1)?.let(::canonicalMusicUri) == target }?.let { (index, row) ->
+                return RootEntry(start + index, response.bytes(1), checkNotNull(row.text(1)), row.message(2)?.number(10) == 1)
             }
-            if (contents.number(2) != 1 || items.isEmpty()) return null
-            offset += items.size
+            val total = response.number(2) ?: 0
+            if (items.isEmpty() || (contents.number(2) != 1 && start + items.size >= total)) return null
+            offset = start + items.size
         }
     }
+
+    private suspend fun rootRevision(session: SpotifySession): ByteArray? {
+        val url = spotifyUrl(rootlistPath(session)).newBuilder()
+            .addQueryParameter("decorate", "revision").addQueryParameter("from", "0").addQueryParameter("length", "0").build()
+        return Proto(authenticatedSpotifyRequest(SpotifyAccount.transport, session, url, "Spotify library")).bytes(1)
+    }
+
+    /** Publishing is the `public` attribute of the playlist's rootlist row, unrelated to collaborative access. */
     suspend fun setPublished(uri: String, published: Boolean) {
-        val canonical = rootEntry(uri)?.first ?: playlistUri(uri)
-        // A fresh core has not loaded the account rootlist yet. Explicitly request it before
-        // resolving a row; unlike a newly created list, an existing list has no local row yet.
-        val username = SpotifyAccount.require(context).username()
-        request("spotify.playlist_esperanto.proto.PlaylistDataService", "Get", proto {
-            writeString(1, "spotify:user:$username:rootlist")
-            writeByteArray(2, proto { writeByteArray(4, proto { writeInt32(1, 0); writeInt32(2, 1) }) })
-        })
-        withTimeout(25_000) {
-            while (true) {
-                try {
-                    modify("RootlistModificationService", proto { writeByteArray(2, proto {
-                        writeString(1, "set"); writeString(8, canonical)
-                        writeByteArray(6, proto { writeBool(1, published) })
-                    }) })
-                    break
-                } catch (failure: SpotifyFailure) {
-                    if (failure.status != 400 || !failure.message.orEmpty().contains("not found in rootlist")) throw failure
-                }
-                delay(500)
-            }
-        }
-        withTimeout(20_000) {
-            while (rootEntry(uri)?.second != published) delay(500)
+        val session = session()
+        retryOnConflict {
+            val entry = rootEntry(session, uri) ?: throw SpotifyFailure("This playlist is not in your library.")
+            if (entry.public != published) postChanges(session, rootlistPath(session),
+                listChanges(entry.revision, listOf(updateItemAttributesOp(entry.index, proto { writeBool(10, published) })), session.username()),
+                "Publish playlist")
         }
     }
+
     suspend fun add(uri: String, tracks: List<Music>, onAccepted: suspend () -> Unit = {}) {
         val uris = spotifyTracks(tracks)
         if (uris.isEmpty()) return
-        val session = SpotifyAccount.require(context)
-        val fallback = Music(playlistUri(uri), "", "", MusicKind.Playlist)
-        suspend fun page(from: Int, length: Int): PlaylistPage {
-            val url = spotifyUrl("playlist/v2/playlist/${playlistUri(uri).substringAfterLast(':')}").newBuilder()
-                .addQueryParameter("from", from.toString()).addQueryParameter("length", length.toString()).build()
-            return decodePlaylistPage(authenticatedSpotifyRequest(SpotifyAccount.transport, session, url, "Add to playlist"), fallback)
-        }
-        val before = page(0, 0).total
-        // Native modifications are bounded; keep order and duplicates, as Spotify does.
-        uris.chunked(100).forEach { chunk ->
-            modify("PlaylistService", playlistModification(uri, proto {
-                writeString(1, "add"); chunk.forEach { writeString(7, it) }
-            }))
-        }
+        // Order and duplicates are kept, as Spotify does; one bounded delta per chunk.
+        uris.chunked(ADD_CHUNK).forEach { chunk -> changePlaylist(uri, "Add to playlist", listOf(addOp(chunk))) }
         onAccepted()
-        // Modify acknowledges the local transaction before the HTTP catalogue catches up.
-        // Keep the native owner alive and avoid replacing the accepted edit with stale data.
-        withTimeout(30_000) {
-            while (true) {
-                val tail = page(before, minOf(100, uris.size))
-                if (tail.total >= before + uris.size && tail.entries.take(minOf(100, uris.size)) == uris.take(100)) break
-                delay(500)
-            }
-        }
     }
+
     /**
      * Removes one appearance of a track: the [occurrence]-th (from 0) row holding [trackUri].
-     * The core removes rows, not URIs, so a duplicated track loses only the chosen copy.
+     * Rows are removed by item ID, so a duplicated track loses only the chosen copy.
      */
     suspend fun remove(uri: String, trackUri: String, occurrence: Int, onAccepted: suspend () -> Unit = {}) {
         val target = playlistEntryUri(trackUri) ?: throw SpotifyFailure("A Spotify playlist only holds Spotify tracks and local files.")
-        val row = rows(uri).filter { (entry, _) -> entry == target }.getOrNull(occurrence)?.second
-            ?: throw SpotifyFailure("This track is no longer in the playlist.")
-        val session = SpotifyAccount.require(context)
-        suspend fun total(): Int {
-            val url = spotifyUrl("playlist/v2/playlist/${playlistUri(uri).substringAfterLast(':')}").newBuilder()
-                .addQueryParameter("from", "0").addQueryParameter("length", "0").build()
-            return decodePlaylistPage(authenticatedSpotifyRequest(SpotifyAccount.transport, session, url, "Remove from playlist"),
-                Music(playlistUri(uri), "", "", MusicKind.Playlist)).total
+        val session = session()
+        retryOnConflict {
+            val (revision, rows) = rows(session, uri)
+            val row = rows.filter { it.uri == target }.getOrNull(occurrence)
+                ?: throw SpotifyFailure("This track is no longer in the playlist.")
+            postChanges(session, playlistPath(uri), listChanges(revision, listOf(removeOp(row)), session.username()), "Remove from playlist")
         }
-        val before = total()
-        modify("PlaylistService", playlistModification(uri, proto { writeString(1, "remove"); writeString(8, row) }))
         onAccepted()
-        // As for additions, keep the native owner alive until Playlist4 shows the change.
-        withTimeout(30_000) { while (total() >= before) delay(500) }
     }
-    /** Every row of the playlist as the core sees it: entry URI and row ID, in playlist order. */
-    private suspend fun rows(uri: String): List<Pair<String, String>> {
-        val result = ArrayList<Pair<String, String>>()
+
+    /** Every row of the playlist, with its index and item ID, and the revision they were read at. */
+    private suspend fun rows(session: SpotifySession, uri: String): Pair<ByteArray?, List<PlaylistRow>> {
+        val result = ArrayList<PlaylistRow>()
+        var revision: ByteArray? = null
         while (true) {
-            val response = request("spotify.playlist_esperanto.proto.PlaylistDataService", "Get", playlistRowsRequest(uri, result.size, ROW_PAGE))
-            val status = response.message(1)?.number(1)
-            if (status !in 200..299) throw SpotifyFailure("The playlist could not be read.", status)
-            val items = response.message(2)?.messages(1).orEmpty()
-            items.forEach { item ->
-                val row = item.text(7) ?: return@forEach
-                val entry = (item.text(18) ?: item.message(4)?.text(1))?.let(::playlistEntryUri) ?: return@forEach
-                result += entry to row
-            }
-            if (items.size < ROW_PAGE) return result
+            val url = spotifyUrl(playlistPath(uri)).newBuilder()
+                .addQueryParameter("from", result.size.toString()).addQueryParameter("length", ROW_PAGE.toString())
+                .addQueryParameter("decorate", "revision,length").build()
+            val page = Proto(authenticatedSpotifyRequest(SpotifyAccount.transport, session, url, "Remove from playlist"))
+            val pageRevision = page.bytes(1)
+            // The list changed while it was being read: start again at the new revision.
+            if (revision != null && pageRevision != null && !revision.contentEquals(pageRevision)) result.clear()
+            revision = pageRevision ?: revision
+            val items = decodePlaylistRows(page, result.size)
+            result += items
+            if (items.isEmpty() || result.size >= (page.number(2) ?: result.size)) return revision to result
         }
     }
-    /** Removes only a playlist explicitly created by a test or requested by its owner. */
+
+    /** Removes a playlist from the account's library. Only for a list created by a test or requested by its owner. */
     suspend fun unfollow(uri: String) {
-        val row = rootEntry(uri)?.first ?: playlistUri(uri)
-        modify("RootlistModificationService", proto { writeByteArray(2, proto {
-            writeString(1, "remove"); writeString(8, row); writeBool(9, false)
-        }) })
-        withTimeout(20_000) { while (rootEntry(uri) != null) delay(500) }
+        val session = session()
+        retryOnConflict {
+            val entry = rootEntry(session, uri) ?: return@retryOnConflict
+            postChanges(session, rootlistPath(session),
+                listChanges(entry.revision, listOf(removeOp(PlaylistRow(entry.index, entry.uri, null))), session.username()),
+                "Remove playlist")
+        }
     }
-    private suspend fun setAttributes(uri: String, attributes: ByteArray) {
-        modify("PlaylistService", playlistModification(uri, proto { writeString(1, "set"); writeByteArray(6, attributes) }))
-    }
+
     /** Image bytes go directly to the same dedicated upload host as SetPlaylistPictureWorker. */
     suspend fun setCover(uri: String, jpeg: ByteArray) {
         require(jpeg.isNotEmpty() && jpeg.size <= 4 * 1024 * 1024)
-        val session = SpotifyAccount.require(context)
+        val session = session()
         val host = "image-upload.spotify.com"
         val headers = session.headers(host)
         val uploaded = SpotifyAccount.transport.send(Request.Builder().url("https://$host/v4/playlist")
@@ -201,66 +176,26 @@ internal class SpotifyPlaylists(private val context: Context) : AutoCloseable {
             .header("Content-Encoding", "identity").post(jpeg.toRequestBody("image/jpeg".toMediaType())).build(), "Spotify cover")
         val token = JSONObject(uploaded.decodeToString()).getString("uploadToken")
         val registered = authenticatedSpotifyRequest(SpotifyAccount.transport, session,
-            spotifyUrl("playlist/v2/playlist/${playlistUri(uri).substringAfterLast(':')}/register-image"),
+            spotifyUrl("${playlistPath(uri)}/register-image"),
             "Cover registration", proto { writeString(1, token) }, "application/protobuf")
-        val picture = Proto(registered).bytes(1)?.let { value ->
-            if (value.size == 20) value.joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
-            else value.decodeToString().takeIf { it.matches(Regex("[0-9a-fA-F]{40}")) }?.lowercase()
-        }
-            ?: throw SpotifyFailure("Spotify did not save the cover.")
-        setAttributes(uri, proto { writeString(6, picture) })
+        val picture = pictureId(Proto(registered).bytes(1)) ?: throw SpotifyFailure("Spotify did not save the cover.")
+        changePlaylist(uri, "Playlist cover", listOf(updateListAttributesOp(proto { writeByteArray(3, picture) })))
     }
-    private suspend fun metadata(uri: String): Proto {
-        val response = request("spotify.playlist_esperanto.proto.PlaylistDataService", "Get", proto {
-            writeString(1, playlistUri(uri))
-            writeByteArray(2, proto { writeByteArray(4, proto { writeInt32(1, 0); writeInt32(2, 0) }) })
-            writeByteArray(3, proto { writeByteArray(1, proto {
-                writeBool(2, true); writeBool(5, true); writeBool(19, true); writeBool(22, true)
-            }) })
-        })
-        val status = response.message(1)?.number(1)
-        if (status !in 200..299) throw SpotifyFailure("Playlist information is unavailable.", status)
-        return response.message(2)?.message(2)?.message(1) ?: throw SpotifyFailure("Missing playlist information.")
+
+    suspend fun isOwned(uri: String): Boolean {
+        val session = SpotifyAccount.require(context)
+        return head(session, uri, "Spotify playlist").text(16) == session.username()
     }
-    /**
-     * A page of a playlist read through the native core (`PlaylistDataService/Get`), as the official
-     * app reads it. Used when Playlist4 over HTTP refuses the request.
-     */
-    suspend fun page(uri: String, from: Int, length: Int, fallback: Music): PlaylistPage {
-        val response = request("spotify.playlist_esperanto.proto.PlaylistDataService", "Get", nativePageRequest(uri, from, length))
-        val status = response.message(1)?.number(1)
-        if (status !in 200..299) throw SpotifyFailure("Spotify playlist: native read refused (code $status).", status)
-        return decodeNativePlaylistPage(response, fallback, from)
-    }
-    /**
-     * Track, album and artist metadata through the native core (`ClassicMetadataService/MultigetEntity`),
-     * as the official app's pages read it. Used when Extended Metadata over HTTP refuses the entities.
-     */
-    suspend fun entities(uris: List<String>): Map<String, ByteArray> =
-        decodeNativeMetadata(request(CLASSIC_METADATA_SERVICE, "MultigetEntity", nativeMetadataRequest(uris)), uris)
-    suspend fun isOwned(uri: String): Boolean = metadata(uri).number(4) == 1
-    suspend fun published(uri: String): Boolean = rootEntry(uri)?.second ?: false
+
+    suspend fun published(uri: String): Boolean = rootEntry(SpotifyAccount.require(context), uri)?.public ?: false
+
+    /** Interleaved radios of the playlist's last few tracks, without the tracks it already holds. */
     suspend fun recommendations(uri: String, tracks: List<Music>, fallback: List<Music>): List<Music> {
+        playlistUri(uri)
         val excluded = tracks.map(Music::id).toSet()
-        val native = request("spotify.playlist_esperanto.proto.PlaylistDataService", "Get", proto {
-            writeString(1, playlistUri(uri))
-            writeByteArray(2, proto { writeBool(10, true); writeByteArray(4, proto { writeInt32(1, 0); writeInt32(2, 0) }) })
-            writeByteArray(3, proto {
-                writeByteArray(1, proto { writeBool(2, true) })
-                writeByteArray(2, proto { writeByteArray(1, proto { writeBool(2, true); writeBool(3, true) }) })
-            })
-        })
-        val recommended = native.message(2)?.messages(10).orEmpty().mapNotNull { it.message(1)?.text(3) }
-            .mapNotNull(::canonicalMusicUri).filter { it.startsWith("spotify:track:") && it !in excluded }.distinct()
-        if (recommended.isNotEmpty()) {
-            android.util.Log.i("MeloPlaylist", "Native recommendations=${recommended.size}")
-            val session = SpotifyAccount.require(context)
-            return SpotifyCatalog(SpotifyAccount.transport, session).hydrate(recommended.take(30))
-        }
         val seeds = tracks.takeLast(3).ifEmpty { fallback.take(1) }
         if (seeds.isEmpty()) return emptyList()
-        val session = SpotifyAccount.require(context)
-        val radio = SpotifyRadio(SpotifyAccount.transport, session)
+        val radio = SpotifyRadio(SpotifyAccount.transport, SpotifyAccount.require(context))
         val stations = seeds.map { seed -> radio.station(seed).tracks }
         return interleaveStations(stations).filter { it.id !in excluded }.take(20)
     }
@@ -286,63 +221,90 @@ internal fun spotifyLocalUri(track: Music): String? {
     return SPOTIFY_LOCAL_PREFIX + listOf(encode(track.subtitle), encode(track.album), encode(track.title), (track.durationMs / 1000).toString())
         .joinToString(":")
 }
-internal fun createPlaylistRequest(name: String, uris: List<String>): ByteArray = proto {
-    writeString(1, "")
-    writeByteArray(2, proto {
-        writeString(1, "create"); writeString(2, "start"); writeString(4, name); writeBool(5, true)
-        uris.forEach { writeString(7, it) }
-        writeByteArray(14, proto { writeEnum(1, 1) })
-    })
-}
 private const val ROW_PAGE = 500
+private const val ADD_CHUNK = 100
+
+/** A playlist row: its position, its entry URI as stored and its Playlist4 item ID. */
+internal class PlaylistRow(val index: Int, val uri: String, val itemId: ByteArray?)
 
 /** A playlist entry as stored by Spotify: a track URI, or a `spotify:local:` reference kept as written. */
 internal fun playlistEntryUri(uri: String): String? =
     if (uri.startsWith(SPOTIFY_LOCAL_PREFIX)) uri else canonicalMusicUri(uri)?.takeIf { it.startsWith("spotify:track:") }
 
-/** `PlaylistDataService/Get` for a range of rows, with each item's URI and row ID, unavailable items included. */
-internal fun playlistRowsRequest(uri: String, start: Int, length: Int): ByteArray = proto {
-    writeString(1, playlistUri(uri))
-    writeByteArray(2, proto {
-        writeByteArray(4, proto { writeInt32(1, start); writeInt32(2, length) })
-        writeBool(8, true)
-    })
-    writeByteArray(3, proto { writeByteArray(4, proto { writeBool(1, true); writeBool(9, true) }) })
+/** The rows of a `SelectedListContent` page (5 → 3 items: 1 URI, 2 → 12 item ID), numbered from the page's position. */
+internal fun decodePlaylistRows(page: Proto, from: Int): List<PlaylistRow> {
+    val contents = page.message(5) ?: return emptyList()
+    val start = contents.number(1) ?: from
+    return contents.messages(3).mapIndexedNotNull { index, item ->
+        val uri = item.text(1)?.let(::playlistEntryUri) ?: return@mapIndexedNotNull null
+        PlaylistRow(start + index, uri, item.message(2)?.bytes(12))
+    }
 }
-/** `PlaylistDataService/Get` for a range of rows with the playlist's own metadata (name, length, picture). */
-internal fun nativePageRequest(uri: String, start: Int, length: Int): ByteArray = proto {
-    writeString(1, playlistUri(uri))
+
+/** The 20-byte picture ID from `register-image`, sent raw or as 40 hex characters. */
+internal fun pictureId(value: ByteArray?): ByteArray? = when {
+    value == null -> null
+    value.size == 20 -> value
+    else -> value.decodeToString().takeIf { it.matches(Regex("[0-9a-fA-F]{40}")) }
+        ?.chunked(2)?.map { it.toInt(16).toByte() }?.toByteArray()
+}
+
+// Playlist4 `ListChanges` and its parts (playlist4_external.proto):
+// ListChanges 1 base_revision, 2 deltas. Delta 1 base_version, 2 ops, 4 info (ChangeInfo 1 user, 2 timestamp).
+// Op 1 kind, 2 add, 3 rem, 5 update_item_attributes, 6 update_list_attributes.
+// Item 1 uri, 2 attributes (ItemAttributes 2 timestamp, 10 public, 12 item_id).
+internal const val OP_ADD = 2
+internal const val OP_REM = 3
+internal const val OP_UPDATE_ITEM_ATTRIBUTES = 5
+internal const val OP_UPDATE_LIST_ATTRIBUTES = 6
+
+internal fun listChanges(revision: ByteArray?, ops: List<ByteArray>, username: String, now: Long = System.currentTimeMillis()): ByteArray = proto {
+    if (revision != null) writeByteArray(1, revision)
     writeByteArray(2, proto {
-        writeByteArray(4, proto { writeInt32(1, start); writeInt32(2, length) })
-        writeBool(8, true)
-    })
-    writeByteArray(3, proto {
-        writeByteArray(1, proto { for (field in 1..30) writeBool(field, true) })
-        writeByteArray(4, proto { writeBool(1, true); writeBool(9, true) })
+        if (revision != null) writeByteArray(1, revision)
+        ops.forEach { writeByteArray(2, it) }
+        writeByteArray(4, proto { writeString(1, username); writeInt64(2, now) })
     })
 }
 
-/**
- * Response of [nativePageRequest]: 2 → 1 items (18 = URI, or 4 → 1), 2 → 2 → 1 playlist metadata
- * (2 name, 6 length, 7 description, 8 → 1 picture URI).
- */
-internal fun decodeNativePlaylistPage(response: Proto, fallback: Music, from: Int): PlaylistPage {
-    val result = response.message(2)
-    val raw = result?.messages(1).orEmpty()
-    val entries = raw.mapNotNull { item -> (item.text(18) ?: item.message(4)?.text(1))?.let(::playlistEntryUri) }
-    val meta = result?.message(2)?.message(1)
-    val total = meta?.number(6) ?: (from + raw.size)
-    val image = meta?.message(8)?.text(1)?.let(::spotifyArtwork) ?: fallback.imageUrl
-    return PlaylistPage(
-        item = fallback.copy(
-            title = meta?.text(2)?.takeIf(String::isNotBlank) ?: fallback.title,
-            subtitle = `in`.melo.utils.formatSongCount(total),
-            imageUrl = image, note = meta?.text(7) ?: fallback.note,
-        ),
-        uris = entries.filter { it.startsWith("spotify:track:") }, total = total, rawCount = raw.size,
-        hasMore = raw.isNotEmpty() && from + raw.size < total, entries = entries,
-    )
+/** `Add` (2 items, 4 add_last, 5 add_first): appends [uris], or puts them first, keeping order and duplicates. */
+internal fun addOp(uris: List<String>, first: Boolean = false, public: Boolean? = null, now: Long = System.currentTimeMillis()): ByteArray = proto {
+    writeEnum(1, OP_ADD)
+    writeByteArray(2, proto {
+        uris.forEach { uri -> writeByteArray(2, proto {
+            writeString(1, uri)
+            writeByteArray(2, proto { writeInt64(2, now); if (public != null) writeBool(10, public) })
+        }) }
+        if (first) writeBool(5, true) else writeBool(4, true)
+    })
 }
-internal fun playlistModification(uri: String, modification: ByteArray): ByteArray = proto {
-    writeString(1, playlistUri(uri)); writeByteArray(2, modification)
+
+/** `Rem` (1 from_index, 2 length, 3 items, 7 items_as_key): one row, matched by its item ID when it has one. */
+internal fun removeOp(row: PlaylistRow): ByteArray = proto {
+    writeEnum(1, OP_REM)
+    writeByteArray(3, proto {
+        writeInt32(1, row.index); writeInt32(2, 1)
+        writeByteArray(3, proto {
+            writeString(1, row.uri)
+            row.itemId?.let { id -> writeByteArray(2, proto { writeByteArray(12, id) }) }
+        })
+        writeBool(7, true)
+    })
+}
+
+/** `UpdateItemAttributes` (1 index, 2 new_attributes → 1 values): sets the given `ItemAttributes` fields of one row. */
+internal fun updateItemAttributesOp(index: Int, attributes: ByteArray): ByteArray = proto {
+    writeEnum(1, OP_UPDATE_ITEM_ATTRIBUTES)
+    writeByteArray(5, proto { writeInt32(1, index); writeByteArray(2, proto { writeByteArray(1, attributes) }) })
+}
+
+/** `UpdateListAttributes` (1 new_attributes → 1 values): sets the given `ListAttributes` fields (1 name, 2 description, 3 picture). */
+internal fun updateListAttributesOp(attributes: ByteArray): ByteArray = proto {
+    writeEnum(1, OP_UPDATE_LIST_ATTRIBUTES)
+    writeByteArray(6, proto { writeByteArray(1, proto { writeByteArray(1, attributes) }) })
+}
+
+/** `POST playlist/v2/playlist`: an `OpList` (1 ops) naming the new list. The reply is `CreateListReply` (1 uri, 2 revision). */
+internal fun createPlaylistRequest(name: String): ByteArray = proto {
+    writeByteArray(1, updateListAttributesOp(proto { writeString(1, name) }))
 }

@@ -16,8 +16,6 @@
     <string name="melo_connecting">Connecting to device…</string>
     <string name="melo_preparing">Preparing playback…</string>
     <string name="melo_loading_audio">Loading audio…</string>
-    <string name="melo_advanced">Advanced</string>
-    <string name="melo_advanced_description">Blur and corner rendering</string>
     <string name="melo_audio_details">Audio details</string>
     <string name="melo_loading_library">Loading your music…</string>
     <string name="melo_library_error_title">Could not refresh your music</string>

@@ -1,5 +1,7 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloLayout
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,17 +13,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -93,23 +89,22 @@ internal fun HistoryScreen(model: MeloModel, navController: NavHostController) {
         else -> day.format(dayFormat).replaceFirstChar { it.titlecase() }
     }
 
-    Scaffold(
+    `in`.melo.presentation.components.MeloPageScaffold(
         topBar = {
             TopAppBar(
+                colors = `in`.melo.presentation.components.meloPageBarColors(),
                 title = { Text(title, fontFamily = GoogleSansRounded, modifier = Modifier.padding(start = 8.dp)) },
                 navigationIcon = {
-                    FilledTonalIconButton(
-                        modifier = Modifier.padding(start = MeloLayout.Space3),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
+                    `in`.melo.presentation.components.MeloIconButton(
+                        icon = MeloIcons.ArrowBack,
+                        contentDescription = stringResource(R.string.common_back),
                         onClick = { navController.popBackStack() },
-                    ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.common_back)) }
+                        modifier = Modifier.padding(start = MeloLayout.Space2),
+                    )
                 },
                 actions = {
                     if (local.isNotEmpty()) IconButton(onClick = { clearing = true }, modifier = Modifier.padding(end = 8.dp)) {
-                        Icon(Icons.Rounded.DeleteSweep, stringResource(R.string.history_clear))
+                        Icon(MeloIcons.DeleteSweep, stringResource(R.string.history_clear))
                     }
                 },
             )
@@ -159,11 +154,11 @@ internal fun HistoryScreen(model: MeloModel, navController: NavHostController) {
         }
     }
     SongOptionsHost(ui, navController, selected, songs, title) { selected = null }
-    if (clearing) AlertDialog(
+    if (clearing) MeloAlertDialog(
         onDismissRequest = { clearing = false },
         title = { Text(stringResource(R.string.history_clear)) },
         text = { Text(stringResource(R.string.history_clear_message)) },
-        confirmButton = { TextButton(onClick = { clearing = false; scope.launch(kotlinx.coroutines.Dispatchers.IO) { model.listeningHistory.clear() } }) { Text(stringResource(R.string.history_clear_confirm)) } },
-        dismissButton = { TextButton(onClick = { clearing = false }) { Text(stringResource(android.R.string.cancel)) } },
+        confirmButton = { `in`.melo.presentation.components.MeloButton(text = stringResource(R.string.history_clear_confirm), onClick = { clearing = false; scope.launch(kotlinx.coroutines.Dispatchers.IO) { model.listeningHistory.clear() } }, size = `in`.melo.presentation.components.MeloButtonSize.Medium, style = `in`.melo.presentation.components.MeloButtonStyle.Tonal, contentColor = MaterialTheme.colorScheme.error) },
+        dismissButton = { `in`.melo.presentation.components.MeloButton(text = stringResource(android.R.string.cancel), onClick = { clearing = false }, size = `in`.melo.presentation.components.MeloButtonSize.Medium, style = `in`.melo.presentation.components.MeloButtonStyle.Text) },
     )
 }

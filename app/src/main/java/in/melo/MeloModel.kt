@@ -98,8 +98,11 @@ import java.util.UUID
 import `in`.melo.utils.parseSongCount
 import `in`.melo.utils.formatSongCount
 
-/** What a search reads. [All], the default, mixes Spotify (with an account), YouTube Music and device files. */
-enum class SearchSource { All, Spotify, YouTubeMusic, Local }
+/**
+ * What a search reads. [All], the default, mixes Spotify (with an account), YouTube Music and device files.
+ * [Addons] reads the listener's add-ons only, and only when one is enabled.
+ */
+enum class SearchSource { All, Spotify, YouTubeMusic, Local, Addons }
 
 data class Discovery(
     val query: String = "",
@@ -112,9 +115,14 @@ data class Discovery(
     val error: String? = null,
     val spotifyEnabled: Boolean = false,
     val source: SearchSource = SearchSource.All,
+    val addonsEnabled: Boolean = false,
 ) {
-    /** The source actually searched: Spotify needs an account. */
-    val activeSource: SearchSource get() = if (!spotifyEnabled && source == SearchSource.Spotify) SearchSource.All else source
+    /** The source actually searched: Spotify needs an account, add-ons an enabled add-on. */
+    val activeSource: SearchSource get() = when {
+        !spotifyEnabled && source == SearchSource.Spotify -> SearchSource.All
+        !addonsEnabled && source == SearchSource.Addons -> SearchSource.All
+        else -> source
+    }
     val hasMore: Boolean get() = nextPage != null || youTubeNext != null
 }
 
@@ -217,6 +225,10 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
     private val pinnedStore = PinnedStore(app)
     val pins = pinnedStore.pins
     fun togglePin(item: Music) = pinnedStore.toggle(item)
+    val hiddenFromDial = pinnedStore.hiddenFromDial
+    fun removeFromDial(item: Music) = pinnedStore.removeFromDial(item)
+    fun savedDial(name: String) = pinnedStore.savedDial(name)
+    fun saveDial(name: String, key: String, items: List<Music>) = pinnedStore.saveDial(name, key, items)
     fun movePin(from: Int, to: Int) = pinnedStore.move(from, to)
     val ui by lazy { PlayerViewModel(this, viewModelScope) }
     val localLibrary = LocalLibrary(app)
@@ -727,8 +739,35 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         info.handle.ifBlank { info.name }
     }?.lowercase(Locale.ROOT) ?: if (YouTubeAccount.signedIn) "signed-in" else "anonymous"
 
+    /*
+     * Everything the start-up work below can reach is declared above it. Kotlin sets properties in
+     * the order they are written, and the coroutines `init` starts run at once on the main thread:
+     * one that reached a property written further down found it still null, and `ui`, built then
+     * for a saved local playlist, kept that null and crashed the player's queue.
+     */
+    private val requestedCovers = HashSet<String>()
+    private var coversRequested = 0
+    private var upNextJob: Job? = null
+    private var radioRefreshJob: Job? = null
+    private var radioAutoRefillJob: Job? = null
+    private var lastRadioAutoRefillTrackId: String? = null
+    private var radioAutoNoFreshSeedKey: String? = null
+    private val mutableRadioRefreshInProgress = MutableStateFlow(false)
+    val radioRefreshInProgress = mutableRadioRefreshInProgress.asStateFlow()
+    internal val spotifyPlaylists = SpotifyPlaylists(app)
+    private var lyrics: SpotifyLyricsSource? = null
+    private val mutableConversion = MutableStateFlow<`in`.melo.data.PlaylistConversion?>(null)
+    /** The conversion shown by the converter, kept while its screen is open. */
+    val conversion = mutableConversion.asStateFlow()
+
     init {
         if (mutableGuest.value) installLibrary(emptyLibrary(), false)
+        `in`.melo.data.addons.AddonResolver.init(app)
+        viewModelScope.launch {
+            `in`.melo.data.addons.AddonStore.get(app).addons.collect { list ->
+                mutableDiscovery.update { it.copy(addonsEnabled = list.any { addon -> addon.enabled }) }
+            }
+        }
         viewModelScope.launch {
             localPlaylistStore.playlists.collect { playlists ->
                 playlists.forEach { ui.register(it.asMusic()) }
@@ -979,8 +1018,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
                 )
             }
     }
-    private val requestedCovers = HashSet<String>()
-    private var coversRequested = 0
     private suspend fun fullDetail(source: SpotifyCatalog, item: Music, atLeast: Int = Int.MAX_VALUE, pageLimit: Int = MAX_DETAIL_PAGES): CatalogDetail {
         var detail = source.detail(item)
         var pages = 1
@@ -1256,7 +1293,7 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
                         if (result != null) {
                             mutableHomeRecommendations.value = result
                             val cache = HomeRecommendationCache(request.listener, request.hour,
-                                result.copy(youtubeRecent = result.youtubeRecent.take(12)))
+                                result.copy(youtubeRecent = result.youtubeRecent.take(HOME_YOUTUBE_RECENT)))
                             preferences.edit { putString(KEY_HOME_RECOMMENDATIONS, HomeRecommendationCacheCodec.encode(cache)) }
                         } else {
                             homeRecommendationKey = null
@@ -1332,6 +1369,7 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
                         personalizedError = null,
                         loadingCategories = false,
                         error = null,
+                        personalizedLoadedAt = System.currentTimeMillis(),
                     )
                 }
                 if (selected != null) loadYouTubeHomeCategory(selected, identity, keepExisting = true)
@@ -1403,6 +1441,72 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /**
+     * What the Mixes Dial deals from besides Home's loaded shelves, read afresh for each deal:
+     * YouTube Music's "Mixed for you" page; Home's further pages when
+     * the loaded ones lack "From the community", up to [MixesDial.COMMUNITY_PAGES] of them; and
+     * the playlists of Explore's "Decades" category. A source that fails is left empty.
+     */
+    suspend fun mixesDialSources(loaded: List<`in`.melo.data.YouTubeHomeShelf>): MixesDialSources =
+        withContext(Dispatchers.IO) {
+            kotlinx.coroutines.coroutineScope {
+                val mixed = async { mixesDialRead("mixed for you") { YouTubeLibrary.mixedForYou() } }
+                val more = async {
+                    if (`in`.melo.data.MixesDial.shelfPlaylists(loaded, `in`.melo.data.MixesDial.FROM_THE_COMMUNITY).isNotEmpty()) {
+                        emptyList()
+                    } else mixesDialRead("community") { communityPages() }
+                }
+                val decades = async { mixesDialRead("decades") { decadesPlaylists() } }
+                MixesDialSources(mixed.await(), more.await(), decades.await())
+            }
+        }
+
+    private suspend fun <T> mixesDialRead(what: String, read: suspend () -> List<T>): List<T> = try {
+        read().also { android.util.Log.d("MixesDial", "$what: ${it.size}") }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        android.util.Log.w("MixesDial", "$what unavailable: ${failure.message}")
+        emptyList()
+    }
+
+    /** Home read from the top, a few pages on, until "From the community" turns up. */
+    private fun communityPages(): List<`in`.melo.data.YouTubeHomeShelf> {
+        val read = ArrayList<`in`.melo.data.YouTubeHomeShelf>()
+        var page = YouTubePages.homePage(YouTubeLibrary.homeRequest("browse", org.json.JSONObject().put("browseId", "FEmusic_home")))
+        var pages = 0
+        while (true) {
+            read += page.shelves
+            if (`in`.melo.data.MixesDial.shelfPlaylists(read, `in`.melo.data.MixesDial.FROM_THE_COMMUNITY).isNotEmpty()) break
+            val token = page.continuation?.takeIf { pages++ < `in`.melo.data.MixesDial.COMMUNITY_PAGES } ?: break
+            page = YouTubePages.homeContinuationPage(
+                YouTubeLibrary.homeRequest("browse", org.json.JSONObject().put("continuation", token)),
+            )
+        }
+        return read
+    }
+
+    /** Every playlist of Explore's "Decades" category; its place on Explore is kept once found. */
+    private fun decadesPlaylists(): List<Music> {
+        val category = decadesCategory ?: run {
+            val sections = mutableYouTubeExplore.value.sections.ifEmpty {
+                YouTubePages.exploreCategories(
+                    YouTubeLibrary.homeRequest("browse", org.json.JSONObject().put("browseId", "FEmusic_moods_and_genres")),
+                )
+            }
+            sections.flatMap { it.categories }
+                .firstOrNull { it.title.trim().equals(`in`.melo.data.MixesDial.DECADES, ignoreCase = true) }
+                ?.also { decadesCategory = it }
+        } ?: return emptyList()
+        val body = org.json.JSONObject().put("browseId", category.browseId)
+        category.params?.let { body.put("params", it) }
+        return YouTubePages.browseShelves(YouTubeLibrary.homeRequest("browse", body))
+            .flatMap { it.items }
+            .filter(`in`.melo.data.MixesDial::isYouTubePlaylist)
+    }
+
+    @Volatile private var decadesCategory: YouTubeExploreCategory? = null
 
     /** Loads the selected category's next Home page as the list approaches its end. */
     fun loadMoreYouTubeHomeCategory() {
@@ -1798,7 +1902,8 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
             .distinctBy(Music::id).take(36).toList()
         return HomeRecommendationState(
             picks = picks,
-            youtubeRecent = accountHistory.map { it.track }.take(12),
+            // As many as the speed dial holds: its Recents, after YouTube's own Speed dial shelf.
+            youtubeRecent = accountHistory.map { it.track }.take(HOME_YOUTUBE_RECENT),
             youtubeArtists = artists,
             youtubeMixes = mixes.filter { it.kind == MusicKind.Playlist }.distinctBy(Music::id),
         )
@@ -1868,13 +1973,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private var upNextJob: Job? = null
-    private var radioRefreshJob: Job? = null
-    private var radioAutoRefillJob: Job? = null
-    private var lastRadioAutoRefillTrackId: String? = null
-    private var radioAutoNoFreshSeedKey: String? = null
-    private val mutableRadioRefreshInProgress = MutableStateFlow(false)
-    val radioRefreshInProgress = mutableRadioRefreshInProgress.asStateFlow()
 
     /**
      * A track chosen on its own plays at once and its radio follows it, as in YouTube Music and Spotify,
@@ -2107,7 +2205,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         withContext(Dispatchers.IO) { store.saveDetail(item.id, fetched) }
         return fetched
     }
-    internal val spotifyPlaylists = SpotifyPlaylists(app)
     internal suspend fun createSpotifyPlaylist(name: String, tracks: List<Music>, published: Boolean): Music {
         val created = spotifyPlaylists.create(name, tracks, published)
         ui.register(created)
@@ -2186,7 +2283,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         val offline = spotifyAttribute(transport, session, "offline")
         return offline == null && spotifyAttribute(transport, session, "type") == "premium" || offline == "true" || offline == "1"
     }
-    private var lyrics: SpotifyLyricsSource? = null
     fun lyricsSource(): SpotifyLyricsSource? = lyrics
     fun showMessage(text: String) { mutableMessage.value = text }
     suspend fun tracksOf(item: Music): List<Music> { return when {
@@ -2259,8 +2355,43 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         if (trimmed.length < 2) return
         if (discovery.value.activeSource == SearchSource.Local) { showDeviceResults(trimmed); return }
         if (!online.value) { showLocalResults(trimmed, null); return }
+        if (discovery.value.activeSource == SearchSource.Addons) { loadAddonResults(trimmed, debounce); return }
         loadResults(trimmed, debounce)
     }
+
+    /** Rows from every enabled add-on, played straight from the add-on that listed them. */
+    private fun loadAddonResults(query: String, debounce: Boolean) {
+        searchJob = viewModelScope.launch {
+            if (debounce) delay(SEARCH_DEBOUNCE_MS)
+            val rows = try {
+                withContext(Dispatchers.IO) { `in`.melo.data.addons.AddonResolver.search(query) }
+            } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) {
+                android.util.Log.w("MeloSearch", "add-ons: ${failure.javaClass.simpleName}")
+                emptyList()
+            }
+            val results = rows.filterNot { (_, row) -> row.isDolbyAtmos }.map { (addon, row) -> addonMusic(addon.id, row) }
+                .distinctBy(Music::id)
+            results.forEach(ui::register)
+            mutableDiscovery.update {
+                it.copy(loading = false, results = results,
+                    error = if (results.isEmpty()) app.getString(`in`.melo.R.string.addon_search_empty) else null)
+            }
+        }
+    }
+
+    private fun addonMusic(addonId: String, row: `in`.melo.data.addons.AddonTrack) = Music(
+        id = `in`.melo.data.addons.AddonUris.trackId(addonId, row.id),
+        title = row.title,
+        subtitle = row.artist,
+        kind = MusicKind.Track,
+        imageUrl = row.artwork,
+        durationMs = (row.durationSec ?: 0) * 1000,
+        album = row.album,
+        quality = listOfNotNull(
+            row.format.ifBlank { null }?.uppercase(),
+            when { row.isHiRes -> "Hi-Res"; row.isLossless -> "Lossless"; else -> null },
+        ).joinToString(" · "),
+    )
 
     fun setSearchSource(source: SearchSource) {
         if (discovery.value.source == source) return
@@ -2447,10 +2578,8 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         mutableSpotifyAccountProfile.value = null
         // A guest who signs in keeps the multi-service playlists; the library now comes from Spotify.
         if (mutableLibrary.value.content?.let { it.playlists.isEmpty() && it.savedTrackCount == 0 } == true) mutableLibrary.value = LibraryUi()
-        catalog = SpotifyCatalog(transport, session,
-            nativePlaylist = { uri, from, length, fallback -> spotifyPlaylists.page(uri, from, length, fallback) },
-            nativeMetadata = { uris -> uris.chunked(40).fold(emptyMap()) { all, chunk -> all + spotifyPlaylists.entities(chunk) } },
-        )
+        // Without the native core, refused playlist pages fall back to the public embed page.
+        catalog = SpotifyCatalog(transport, session, nativePlaylist = null, nativeMetadata = null)
         collections = SpotifyLibrary(transport, session, requireNotNull(catalog))
         radio = SpotifyRadio(transport, session)
         remote = SpotifySearch(transport, session)
@@ -2667,9 +2796,6 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
 
     // Converter ----------------------------------------------------------------------------------
 
-    private val mutableConversion = MutableStateFlow<`in`.melo.data.PlaylistConversion?>(null)
-    /** The conversion shown by the converter, kept while its screen is open. */
-    val conversion = mutableConversion.asStateFlow()
 
     /** Kinds a playlist can be converted to now: Spotify needs its account, YouTube Music a Google account. */
     fun conversionTargets(source: Music): Map<`in`.melo.data.PlaylistKind, Boolean> {
@@ -2871,3 +2997,14 @@ class MeloModel(private val app: Application) : AndroidViewModel(app) {
         private const val RADIO_REFILL_BATCH_SIZE = 50
     }
 }
+
+/** What [MeloModel.mixesDialSources] read for one deal of the Mixes Dial. */
+data class MixesDialSources(
+    val mixedForYou: List<Music>,
+    /** Home's further pages, read for the community's shelves; empty when the loaded ones had them. */
+    val morePages: List<`in`.melo.data.YouTubeHomeShelf>,
+    val decades: List<Music>,
+)
+
+/** How many of the account's YouTube history songs Home keeps: the speed dial's size. */
+private const val HOME_YOUTUBE_RECENT = 36

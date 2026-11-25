@@ -26,8 +26,8 @@ class UpdatePromptTest {
         instrumentation.waitForIdleSync()
         val updater = AppUpdater.get(context)
         val preferences = context.getSharedPreferences("app_updates", android.content.Context.MODE_PRIVATE)
-        val previousTag = preferences.getString("dismissed_version", null)
-        val previousTime = preferences.getLong("dismissed_at", 0)
+        val previousTag = preferences.getString("hidden_version", null)
+        val previousDate = preferences.getString("hidden_date", null)
         try {
             instrumentation.runOnMainSync {
                 updater.dismiss()
@@ -61,15 +61,15 @@ class UpdatePromptTest {
             assertTrue("Later did not dismiss the update", await { updater.state.value == UpdateState.Idle })
             // Read persisted data again: a new process must observe the same deferral.
             val saved = context.getSharedPreferences("app_updates", android.content.Context.MODE_PRIVATE)
-            assertEquals("v99.0.0", saved.getString("dismissed_version", null))
-            val dismissedAt = saved.getLong("dismissed_at", 0)
-            assertTrue(dismissedAt > 0)
-            assertFalse(UpdateReminder.isDue("v99.0.0", saved.getString("dismissed_version", null), dismissedAt, dismissedAt + UpdateReminder.DELAY_MS - 1))
-            assertTrue(UpdateReminder.isDue("v99.0.0", saved.getString("dismissed_version", null), dismissedAt, dismissedAt + UpdateReminder.DELAY_MS))
+            assertEquals("v99.0.0", saved.getString("hidden_version", null))
+            val hiddenDate = checkNotNull(saved.getString("hidden_date", null))
+            val today = java.time.LocalDate.parse(hiddenDate)
+            assertFalse(UpdateReminder.isDue("v99.0.0", "v99.0.0", hiddenDate, today))
+            assertTrue(UpdateReminder.isDue("v99.0.0", "v99.0.0", hiddenDate, today.plusDays(1)))
         } finally {
             instrumentation.runOnMainSync {
                 updater.dismiss()
-                preferences.edit().putString("dismissed_version", previousTag).putLong("dismissed_at", previousTime).commit()
+                preferences.edit().putString("hidden_version", previousTag).putString("hidden_date", previousDate).commit()
                 activity.finish()
             }
         }

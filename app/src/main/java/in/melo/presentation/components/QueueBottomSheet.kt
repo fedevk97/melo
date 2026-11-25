@@ -1,5 +1,14 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.ui.glass.meloGlass
+import `in`.melo.ui.glass.menuScrimColor
+import `in`.melo.ui.glass.backdrop.backdrops.LayerBackdrop
+import `in`.melo.ui.glass.backdrop.backdrops.layerBackdrop
+import `in`.melo.ui.glass.backdrop.backdrops.rememberLayerBackdrop
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -48,21 +57,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.DragIndicator
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.Timer
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.DoneAll
-import androidx.compose.material.icons.rounded.RemoveDone
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.AssistChip
@@ -85,13 +79,6 @@ import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.MediumFloatingActionButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ClearAll
-import androidx.compose.material.icons.filled.LibraryAdd
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -125,7 +112,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -172,9 +158,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -707,6 +690,8 @@ fun QueueBottomSheet(
             }
         }
 
+    // The queue's own rows, recorded for the glass controls floating over them.
+    val queueBackdrop = rememberLayerBackdrop()
     Surface(
         modifier = modifier.meloPanel(shape, colors.surface)
             .graphicsLayer {
@@ -751,7 +736,7 @@ fun QueueBottomSheet(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            Column {
+            Column(Modifier.layerBackdrop(queueBackdrop)) {
                 val headerTopPadding = WindowInsets.statusBars
                     .asPaddingValues()
                     .calculateTopPadding() + 10.dp
@@ -807,10 +792,6 @@ fun QueueBottomSheet(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clip(shape = queueListShape)
-                                .background(
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    shape = queueListShape
-                                )
                                 .then(
                                     if (isReordering || reorderHandleInUse) {
                                         Modifier
@@ -933,7 +914,7 @@ fun QueueBottomSheet(
                                                     .size(40.dp)
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Rounded.DragIndicator,
+                                                    imageVector = MeloIcons.DragIndicator,
                                                     contentDescription = stringResource(R.string.queue_cd_reorder_song),
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -989,33 +970,28 @@ fun QueueBottomSheet(
                         isTimerActive = isTimerActiveDerived,
                         onToggleShuffle = onToggleShuffle,
                         onToggleRepeat = onToggleRepeat,
-                        onTimerClick = { showTimerOptions = true }
+                        onTimerClick = { showTimerOptions = true },
+                        backdrop = queueBackdrop,
                     )
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(MeloLayout.Space2))
 
-                    MediumFloatingActionButton(
+                    val moreLabel = stringResource(R.string.queue_cd_more_action)
+                    Box(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .aspectRatio(1f),
-                        onClick = { isFabExpanded = !isFabExpanded },
-                        shape = AbsoluteSmoothCornerShape(
-                            cornerRadiusTR = 50.dp,
-                            smoothnessAsPercentTR = 60,
-                            cornerRadiusTL = 8.dp,
-                            smoothnessAsPercentTL = 60,
-                            cornerRadiusBR = 50.dp,
-                            smoothnessAsPercentBR = 60,
-                            cornerRadiusBL = 8.dp,
-                            smoothnessAsPercentBL = 60
-                        ),
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                            .aspectRatio(1f)
+                            .clip(CircleShape)
+                            .meloGlass(CircleShape, backdrop = queueBackdrop)
+                            .clickable { isFabExpanded = !isFabExpanded }
+                            .semantics { contentDescription = moreLabel },
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.MoreHoriz,
-                            contentDescription = stringResource(R.string.queue_cd_more_action),
+                            imageVector = MeloIcons.MoreHoriz,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.graphicsLayer { rotationZ = fabRotation / 2f },
                         )
                     }
                 }
@@ -1029,7 +1005,7 @@ fun QueueBottomSheet(
                         modifier = Modifier
                             .matchParentSize()
                             .zIndex(20f)
-                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = MeloAlpha.Tertiary))
+                            .background(menuScrimColor())
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
@@ -1071,9 +1047,9 @@ fun QueueBottomSheet(
                             if (currentSongDisplayIndex >= 0 && currentSongDisplayIndex < displaySongCount) {
                                 QueueToolbarMenuButton(
                                     text = stringResource(R.string.queue_action_locate_current_song),
-                                    icon = Icons.Rounded.MyLocation,
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    icon = MeloIcons.MyLocation,
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                    backdrop = queueBackdrop,
                                     onClick = {
                                         isFabExpanded = false
                                         queueCoroutineScope.launch {
@@ -1089,9 +1065,9 @@ fun QueueBottomSheet(
                             }
                             QueueToolbarMenuButton(
                                 text = stringResource(R.string.queue_action_clear_queue),
-                                icon = Icons.Filled.ClearAll,
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                icon = MeloIcons.ClearAll,
+                                contentColor = MaterialTheme.colorScheme.error,
+                                backdrop = queueBackdrop,
                                 onClick = {
                                     isFabExpanded = false
                                     showClearQueueDialog = true
@@ -1171,7 +1147,7 @@ fun QueueBottomSheet(
         }
 
         if (showClearQueueDialog) {
-            AlertDialog(
+            MeloAlertDialog(
                 onDismissRequest = { showClearQueueDialog = false },
                 title = { Text(stringResource(R.string.queue_dialog_clear_queue_title)) },
                 text = { Text(stringResource(R.string.queue_dialog_clear_queue_message)) },
@@ -1203,8 +1179,8 @@ fun QueueBottomSheet(
 private fun QueueToolbarMenuButton(
     text: String,
     icon: ImageVector,
-    containerColor: Color,
     contentColor: Color,
+    backdrop: LayerBackdrop?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1215,6 +1191,8 @@ private fun QueueToolbarMenuButton(
             .widthIn(min = 184.dp, max = 260.dp)
             .heightIn(min = 48.dp)
             .wrapContentWidth()
+            .clip(MeloLayout.PanelShape)
+            .meloGlass(MeloLayout.PanelShape, carriesText = true, backdrop = backdrop, underlay = menuScrimColor())
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
@@ -1223,8 +1201,7 @@ private fun QueueToolbarMenuButton(
                 onClick()
             },
         shape = MeloLayout.PanelShape,
-        color = containerColor,
-        shadowElevation = 8.dp
+        color = Color.Transparent,
     ) {
         Row(
             modifier = Modifier
@@ -1363,6 +1340,7 @@ private fun QueueHeader(
             FilledTonalIconButton(
                 onClick = onRefreshRecommendations,
                 enabled = !isRefreshingRecommendations,
+                colors = meloTonalIconColors(),
                 modifier = Modifier
                     .padding(top = 2.dp)
                     .size(48.dp)
@@ -1375,7 +1353,7 @@ private fun QueueHeader(
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Rounded.Refresh,
+                        imageVector = MeloIcons.Refresh,
                         contentDescription = null,
                         modifier = Modifier.size(22.dp)
                     )
@@ -1399,7 +1377,7 @@ private fun QueueSourceBadge(
     Surface(
         modifier = modifier.widthIn(max = 190.dp),
         shape = CircleShape,
-        color = colors.surfaceContainerHighest.copy(alpha = MeloAlpha.Secondary),
+        color = colors.controlFill,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1407,7 +1385,7 @@ private fun QueueSourceBadge(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                imageVector = MeloIcons.QueueMusic,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
                 tint = colors.onSurfaceVariant
@@ -1431,30 +1409,20 @@ private fun QueueControlsToolbar(
     onToggleShuffle: () -> Unit,
     onToggleRepeat: () -> Unit,
     onTimerClick: () -> Unit,
+    backdrop: LayerBackdrop?,
     modifier: Modifier = Modifier
 ) {
     val activeColors = IconButtonDefaults.filledIconButtonColors(
         containerColor = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary
     )
-    val inactiveColors = IconButtonDefaults.filledTonalIconButtonColors(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    val inactiveColors = meloTonalIconColors()
 
     Surface(
-        modifier = modifier.fillMaxHeight(),
-        shape = AbsoluteSmoothCornerShape(
-            cornerRadiusTR = 8.dp,
-            smoothnessAsPercentTR = 60,
-            cornerRadiusTL = 50.dp,
-            smoothnessAsPercentTL = 60,
-            cornerRadiusBR = 8.dp,
-            smoothnessAsPercentBR = 60,
-            cornerRadiusBL = 50.dp,
-            smoothnessAsPercentBL = 60
-        ),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = modifier.fillMaxHeight().clip(MeloLayout.PillShape)
+            .meloGlass(MeloLayout.PillShape, backdrop = backdrop),
+        shape = MeloLayout.PillShape,
+        color = Color.Transparent,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1467,7 +1435,7 @@ private fun QueueControlsToolbar(
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Shuffle,
+                    imageVector = MeloIcons.Shuffle,
                     contentDescription = stringResource(R.string.queue_cd_toggle_shuffle_action),
                 )
             }
@@ -1478,8 +1446,8 @@ private fun QueueControlsToolbar(
                 modifier = Modifier.size(48.dp)
             ) {
                 val repeatIcon = when (repeatMode) {
-                    Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
-                    else -> Icons.Rounded.Repeat
+                    Player.REPEAT_MODE_ONE -> MeloIcons.RepeatOne
+                    else -> MeloIcons.Repeat
                 }
                 Icon(
                     imageVector = repeatIcon,
@@ -1493,7 +1461,7 @@ private fun QueueControlsToolbar(
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Timer,
+                    imageVector = MeloIcons.Timer,
                     contentDescription = stringResource(R.string.queue_cd_sleep_timer_action),
                 )
             }
@@ -1585,12 +1553,9 @@ fun SaveQueueAsPlaylistSheet(
                                 FilledTonalIconButton(
                                     modifier = Modifier.padding(start = 8.dp),
                                     onClick = { onDismiss() },
-                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        contentColor = MaterialTheme.colorScheme.onSurface
-                                    )
+                                    colors = meloTonalIconColors()
                                 ) {
-                                    Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.common_close))
+                                    Icon(MeloIcons.Close, contentDescription = stringResource(R.string.common_close))
                                 }
                             },
                             actions = {
@@ -1632,7 +1597,7 @@ fun SaveQueueAsPlaylistSheet(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (allSelected) Icons.Rounded.RemoveDone else Icons.Rounded.DoneAll,
+                                            imageVector = if (allSelected) MeloIcons.RemoveDone else MeloIcons.DoneAll,
                                             contentDescription = null,
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -1684,7 +1649,7 @@ fun SaveQueueAsPlaylistSheet(
                                 placeholder = { Text(stringResource(R.string.queue_save_as_playlist_search_placeholder)) },
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Rounded.Search,
+                                        MeloIcons.Search,
                                         contentDescription = null
                                     )
                                 },
@@ -1692,7 +1657,7 @@ fun SaveQueueAsPlaylistSheet(
                                     if (searchQuery.isNotEmpty()) {
                                         IconButton(onClick = { searchQuery = "" }) {
                                             Icon(
-                                                Icons.Filled.Clear,
+                                                MeloIcons.Clear,
                                                 contentDescription = stringResource(R.string.common_clear_search)
                                             )
                                         }
@@ -1783,7 +1748,7 @@ fun SaveQueueAsPlaylistSheet(
                                     },
                                     enabled = hasSelection,
                                     size = MeloButtonSize.Medium,
-                                    icon = Icons.Rounded.Check,
+                                    icon = MeloIcons.Check,
                                 )
                             }
                         }
@@ -1812,7 +1777,7 @@ fun SaveQueueAsPlaylistSheet(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Search,
+                                    imageVector = MeloIcons.Search,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary.copy(alpha = MeloAlpha.Scrim),
                                     modifier = Modifier.size(48.dp)
@@ -1906,27 +1871,34 @@ fun QueuePlaylistSongItem(
     val colors = MaterialTheme.colorScheme
 
     val cornerRadius by animateDpAsState(
-        targetValue = if (isCurrentSong) 60.dp else 22.dp,
+        targetValue = 14.dp,
         label = "cornerRadiusAnimation"
     )
 
     val itemShape = RoundedCornerShape(cornerRadius)
 
     val albumCornerRadius by animateDpAsState(
-        targetValue = if (isCurrentSong) 60.dp else 8.dp,
+        targetValue = 6.dp,
         label = "cornerRadiusAnimation"
     )
 
     val albumShape = RoundedCornerShape(albumCornerRadius)
 
     val elevation by animateDpAsState(
-        targetValue = if (isDragging) 4.dp else 1.dp,
+        targetValue = if (isDragging) 4.dp else 0.dp,
         label = "elevationAnimation"
     )
 
-    val backgroundColor = colors.surfaceContainerLowest
-    val mvContainerColor = if (isCurrentSong) colors.tertiaryContainer else colors.surfaceContainerHigh
-    val mvContentColor = if (isCurrentSong) colors.onTertiaryContainer else colors.onSurface
+    val backgroundColor by animateColorAsState(
+        targetValue = when {
+            isDragging -> colors.surfaceContainerHighest
+            isCurrentSong -> colors.onSurface.copy(alpha = 0.08f)
+            else -> Color.Transparent
+        },
+        label = "queueRowBackground"
+    )
+    val mvContainerColor = Color.Transparent
+    val mvContentColor = colors.onSurfaceVariant
     val hapticView = LocalView.current
     val appHapticsConfig = LocalAppHapticsConfig.current
     val dismissScope = rememberCoroutineScope()
@@ -1997,7 +1969,7 @@ fun QueuePlaylistSongItem(
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.rounded_close_24),
+                    painter = meloPainter(R.drawable.rounded_close_24),
                     contentDescription = stringResource(R.string.queue_cd_dismiss_song),
                     modifier = Modifier
                         .padding(end = 16.dp)
@@ -2030,7 +2002,7 @@ fun QueuePlaylistSongItem(
             shadowElevation = elevation
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AnimatedVisibility(visible = isDragHandleVisible) {
@@ -2120,7 +2092,7 @@ fun QueuePlaylistSongItem(
                                 .padding(end = MeloLayout.Space4)
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.MoreVert,
+                                imageVector = MeloIcons.MoreHoriz,
                                 contentDescription = stringResource(
                                     R.string.queue_more_options_for_song,
                                     song.title
@@ -2133,10 +2105,7 @@ fun QueuePlaylistSongItem(
                     AnimatedVisibility(visible = isRemoveButtonVisible && !enableSwipeToDismiss) {
                         FilledIconButton(
                             onClick = onRemoveClick,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = colors.surfaceContainer,
-                                contentColor = colors.onSurface
-                            ),
+                            colors = meloTonalIconColors(),
                             modifier = Modifier
                                 .width(40.dp)
                                 .height(40.dp)
@@ -2144,7 +2113,7 @@ fun QueuePlaylistSongItem(
                         ) {
                             Icon(
                                 modifier = Modifier.size(18.dp),
-                                painter = painterResource(R.drawable.rounded_close_24),
+                                painter = meloPainter(R.drawable.rounded_close_24),
                                 contentDescription = stringResource(R.string.queue_cd_remove_from_playlist),
                             )
                         }

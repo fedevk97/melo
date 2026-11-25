@@ -5,8 +5,7 @@ import okhttp3.Request
 /**
  * Static (9.2.0.26, enum `p.qzy0`): the official app reads `audio-quality` as "0" STANDARD,
  * "1" VERY_HIGH, "2" LOSSLESS. Live: quality 0 can prepare AAC 128 and gets 403 for AAC 256;
- * quality 2 permits both. Without a known value, only a Premium account keeps 256 kbit/s; a refused
- * key lowers the limit at run time either way (see [AudioGrant]).
+ * quality 2 permits both. Without a known value, only a Premium account keeps 256 kbit/s.
  */
 internal fun accountAudioBandwidth(audioQuality: String?, type: String? = null): Long = when (audioQuality?.trim()) {
     "0" -> AudioQuality.NORMAL_BANDWIDTH

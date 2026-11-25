@@ -1,5 +1,8 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.ui.theme.MeloLayout
 import androidx.compose.animation.AnimatedVisibility
@@ -32,13 +35,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.DragIndicator
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -63,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextGeometricTransform
 import androidx.compose.ui.unit.dp
@@ -93,7 +88,7 @@ fun ReorderPresetsSheet(
     var showResetDialog by remember { mutableStateOf(false) }
 
     if (showResetDialog) {
-        AlertDialog(
+        MeloAlertDialog(
             onDismissRequest = { showResetDialog = false },
             title = { Text(stringResource(R.string.equalizer_reset_presets_title)) },
             text = { Text(stringResource(R.string.equalizer_reset_presets_message)) },
@@ -198,13 +193,10 @@ fun ReorderPresetsSheet(
                                 FilledIconButton(
                                     modifier = Modifier.padding(start = MeloLayout.Space2),
                                     onClick = onDismiss,
-                                    colors = IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                                        contentColor = MaterialTheme.colorScheme.onSurface
-                                    )
+                                    colors = `in`.melo.presentation.components.meloTonalIconColors()
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Rounded.Close,
+                                        imageVector = MeloIcons.Close,
                                         contentDescription = stringResource(R.string.common_close)
                                     )
                                 }
@@ -219,7 +211,7 @@ fun ReorderPresetsSheet(
                                     )
                                 ) {
                                     Icon(
-                                        painter = painterResource(R.drawable.outline_restart_alt_24),
+                                        painter = meloPainter(R.drawable.outline_restart_alt_24),
                                         contentDescription = stringResource(R.string.equalizer_cd_reset_presets_default)
                                     )
                                 }
@@ -242,7 +234,7 @@ fun ReorderPresetsSheet(
                             shape = CircleShape,
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.Check,
+                                imageVector = MeloIcons.Check,
                                 contentDescription = stringResource(R.string.common_done),
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
@@ -337,7 +329,7 @@ fun ReorderPresetsSheet(
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Icon(
-                                                        imageVector = Icons.Rounded.DragIndicator,
+                                                        imageVector = MeloIcons.DragIndicator,
                                                         contentDescription = stringResource(R.string.equalizer_cd_reorder),
                                                         modifier = if (item.isPinned) Modifier.draggableHandle() else Modifier,
                                                         tint = if (item.isPinned)
@@ -363,9 +355,9 @@ fun ReorderPresetsSheet(
                                                 ) {
                                                     Icon(
                                                         imageVector = if (item.isPinned)
-                                                            Icons.Rounded.Visibility
+                                                            MeloIcons.Visibility
                                                         else
-                                                            Icons.Rounded.VisibilityOff,
+                                                            MeloIcons.VisibilityOff,
                                                         contentDescription = if (item.isPinned) {
                                                             stringResource(R.string.equalizer_cd_visible)
                                                         } else {

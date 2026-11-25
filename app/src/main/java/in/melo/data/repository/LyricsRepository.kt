@@ -1,12 +1,13 @@
 package `in`.melo.data.repository
 
 import android.content.Context
-import `in`.melo.data.SpotifyFailure
 import `in`.melo.data.SpotifyLyricsSource
 import `in`.melo.data.model.Lyrics
 import `in`.melo.data.model.Song
 import `in`.melo.utils.LyricsUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -32,16 +33,17 @@ data class LrcLibRecord(
 data class LyricsSearchResult(val record: LrcLibRecord, val lyrics: Lyrics, val rawLyrics: String)
 
 /**
- * Spotify's own lyrics first when the track comes from Spotify, then LRCLIB.
- * LRCLIB only ever receives a title, an artist, an album and a duration.
+ * Spotify's own lyrics when the track comes from Spotify, and the [LyricsProvider]s the user left on.
+ * A provider only ever receives a title, an artist, an album and a duration.
  */
 class LyricsRepository(context: Context) {
     private val directory = File(context.applicationContext.filesDir, "lyrics").apply { mkdirs() }
-    private val client = OkHttpClient.Builder().callTimeout(15, TimeUnit.SECONDS)
+    private val client = OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).connectTimeout(5, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             if (!`in`.melo.data.NetworkMonitor.online.value) throw java.io.IOException("No connection")
             chain.proceed(chain.request())
         }.build()
+    private val providers = LyricsProviders(client)
 
     private fun cacheFile(songId: String): File {
         val name = MessageDigest.getInstance("SHA-256").digest(songId.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -56,13 +58,52 @@ class LyricsRepository(context: Context) {
     suspend fun forget(songId: String) = withContext(Dispatchers.IO) { cacheFile(songId).delete(); Unit }
     suspend fun clear() = withContext(Dispatchers.IO) { directory.listFiles()?.forEach(File::delete); Unit }
 
-    suspend fun fromSpotify(song: Song, source: SpotifyLyricsSource?): Lyrics? {
-        if (song.isLocal || source == null) return null
-        return try { source.fetch(song.id)?.also { store(song.id, it.toStoredText()) } } catch (_: SpotifyFailure) { null }
+    /**
+     * Every enabled source is asked at once; their answers are read in priority order (Spotify, then
+     * [enabled] as given). The first word-timed answer wins. Until one arrives, the first line-timed
+     * answer is passed to [show] so the screen is not left empty while slower sources finish.
+     * The answer kept is saved as its source wrote it, word timings included.
+     */
+    suspend fun find(
+        song: Song,
+        spotify: SpotifyLyricsSource?,
+        enabled: List<LyricsProvider>,
+        show: (Lyrics) -> Unit = {},
+    ): Lyrics? = coroutineScope {
+        val query = LyricsQuery(song.title, song.artist, song.album, (song.duration / 1000).toInt())
+        val asks = buildList<suspend () -> String?> {
+            if (!song.isLocal && spotify != null) add { runCatching { spotify.fetch(song.id)?.toStoredText() }.getOrNull() }
+            enabled.distinct().forEach { provider ->
+                add { if (provider == LyricsProvider.LRCLIB) lrcLibRaw(song) else providers.fetch(provider, query) }
+            }
+        }
+        val jobs = asks.map { ask ->
+            async(Dispatchers.Default) {
+                val raw = runCatching { ask() }.getOrNull()?.takeIf(String::isNotBlank) ?: return@async null
+                LyricsUtils.parseLyrics(raw).takeIf(::hasContent)?.let { raw to it }
+            }
+        }
+        var timed: Pair<String, Lyrics>? = null
+        var plain: Pair<String, Lyrics>? = null
+        try {
+            for (job in jobs) {
+                val (raw, lyrics) = job.await() ?: continue
+                when {
+                    lyrics.synced.orEmpty().any { !it.words.isNullOrEmpty() } -> { timed = raw to lyrics; break }
+                    !lyrics.synced.isNullOrEmpty() -> if (timed == null) { timed = raw to lyrics; show(lyrics) }
+                    else -> if (plain == null) plain = raw to lyrics
+                }
+            }
+        } finally {
+            jobs.forEach { it.cancel() }
+        }
+        val kept = timed ?: plain ?: return@coroutineScope null
+        store(song.id, kept.first)
+        kept.second
     }
 
     /** The exact LRCLIB lookup first, then its text search, keeping results close in duration. */
-    suspend fun fromLrcLib(song: Song): Lyrics? {
+    private suspend fun lrcLibRaw(song: Song): String? {
         val seconds = (song.duration / 1000).toInt()
         val exact = runCatching {
             get("https://lrclib.net/api/get".toHttpUrl().newBuilder()
@@ -72,7 +113,7 @@ class LyricsRepository(context: Context) {
         val record = exact?.takeIf { !it.syncedLyrics.isNullOrBlank() || !it.plainLyrics.isNullOrBlank() }
             ?: search(song.title, song.artist).firstOrNull { kotlin.math.abs(it.record.duration - seconds) <= 5 }?.record
             ?: return null
-        return (record.syncedLyrics?.takeIf(String::isNotBlank) ?: record.plainLyrics)?.let(LyricsUtils::parseLyrics)?.takeIf(::hasContent)
+        return record.syncedLyrics?.takeIf(String::isNotBlank) ?: record.plainLyrics?.takeIf(String::isNotBlank)
     }
 
     suspend fun search(title: String, artist: String?): List<LyricsSearchResult> {

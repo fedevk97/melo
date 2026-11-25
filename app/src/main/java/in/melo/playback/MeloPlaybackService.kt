@@ -1,6 +1,7 @@
 package `in`.melo.playback
 
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import android.app.PendingIntent
@@ -17,10 +18,6 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import `in`.melo.BuildConfig
-import androidx.media3.exoplayer.hls.HlsMediaSource
-import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
-import androidx.media3.exoplayer.drm.FrameworkMediaDrm
-import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
@@ -34,71 +31,31 @@ import `in`.melo.data.MusicSource
 import `in`.melo.data.musicSourceOf
 import `in`.melo.data.UsageAnalytics
 import `in`.melo.data.preferences.SettingsStore
-import `in`.melo.data.SpotifyHlsDataSource
 
 @UnstableApi
 class MeloPlaybackService : MediaLibraryService() {
     private var mediaSession: MediaLibrarySession? = null
-    private var source: SpotifyHlsDataSource.Factory? = null
-    private var nativeAudio: NativeAudioProvider? = null
     private var behavior: PlaybackBehavior? = null
     private var preloader: QueuePreloader? = null
     private var recovery: PlaybackRecovery? = null
     private var normalizingSink: NormalizingAudioSink? = null
+    private var discord: DiscordPresence? = null
+    private var upgrader: LosslessUpgrader? = null
     private val effectsScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate + kotlinx.coroutines.SupervisorJob())
     override fun onCreate() {
         super.onCreate()
-        val audio = if (BuildConfig.NATIVE_RUNTIME) NativeAudioProvider(this).also { nativeAudio = it; currentNativeAudio = it } else null
-        val http = SpotifyHlsDataSource.Factory(this, nativeAudio = audio != null).also { source = it }
-        // Betamax's audio provider (h9v.b in the supplied APK) explicitly selects L3.
-        // Configure the platform CDM before any session is opened; it retains all keys.
-        val drm = DefaultDrmSessionManager.Builder()
-            .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID) { uuid ->
-                FrameworkMediaDrm.newInstance(uuid).apply { setPropertyString("securityLevel", "L3") }
-            }
-            .setMultiSession(true).setPlayClearSamplesWithoutKeys(true)
-            .build(HttpMediaDrmCallback("https://spclient.wg.spotify.com/widevine-license/v1/audio/license", false, http))
         val renderers = object : DefaultRenderersFactory(this) {
-            override fun getCodecAdapterFactory(): androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory {
-                val factory = super.getCodecAdapterFactory()
-                if (audio != null) return audio.codecFactory
-                if (!BuildConfig.DEBUG) return factory
-                return androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory { configuration ->
-                    val codec = factory.createAdapter(configuration)
-                    var count = 0
-                    object : androidx.media3.exoplayer.mediacodec.MediaCodecAdapter by codec {
-                        override fun queueSecureInputBuffer(index: Int, offset: Int, info: androidx.media3.decoder.CryptoInfo, timeUs: Long, flags: Int) {
-                            if (++count % 200 == 1) android.util.Log.i("MeloAudio", "secure mode=${info.mode} ivSize=${info.iv?.size} ivPresent=${info.iv?.any { it.toInt() != 0 }} sub=${info.numSubSamples} clear=${info.numBytesOfClearData?.sum()} encrypted=${info.numBytesOfEncryptedData?.sum()} blocks=${info.encryptedBlocks}/${info.clearBlocks} crypto=${configuration.crypto != null}")
-                            codec.queueSecureInputBuffer(index, offset, info, timeUs, flags)
-                        }
-                    }
-                }
-            }
             override fun buildAudioSink(context: android.content.Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
                 NormalizingAudioSink(DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .apply { if (BuildConfig.BUILD_TYPE == "debug") setAudioProcessors(arrayOf(SignalProbe())) }.build())
                     .also { normalizingSink = it }
         }
-        // Playlists have no length and stay out of both caches: the data source keeps those itself.
-        val cacheFlags = CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR or CacheDataSource.FLAG_IGNORE_CACHE_FOR_UNSET_LENGTH_REQUESTS
-        val recentAudioWriter = CacheDataSource.Factory().setCache(AudioCache.cache(this)).setCacheKeyFactory(AudioCache.keys)
-            .setUpstreamDataSourceFactory(http).setFlags(cacheFlags)
-        val recentAudioReader = CacheDataSource.Factory().setCache(AudioCache.cache(this)).setCacheKeyFactory(AudioCache.keys)
-            .setUpstreamDataSourceFactory(http).setCacheWriteDataSinkFactory(null).setFlags(cacheFlags)
-        val recentAudio = RecentAudioDataSourceFactory(this, recentAudioWriter, recentAudioReader)
         // YouTube Music requests have no known length: they use their own chain, keyed by track.
         val youtube = youTubeCacheChain(this)
+        `in`.melo.data.addons.AddonResolver.init(this)
         val player = ExoPlayer.Builder(this, renderers)
-            .setMediaSourceFactory(MeloMediaSourceFactory(HlsMediaSource.Factory(
-                CacheDataSource.Factory().setCache(DownloadCenter.cache(this)).setCacheKeyFactory(AudioCache.keys)
-                    .setUpstreamDataSourceFactory(recentAudio)
-                    .setCacheWriteDataSinkFactory(null)
-                    .setFlags(cacheFlags)
-            ).setLoadErrorHandlingPolicy(ResilientLoadPolicy()).apply {
-                if (audio != null) setExtractorFactory(NativeHlsExtractor(audio))
-                else { setDrmSessionManagerProvider { drm }; if (BuildConfig.DEBUG) setExtractorFactory(ExtractorProbe()) }
-            }, ProgressiveMediaSource.Factory(DefaultDataSource.Factory(this)),
+            .setMediaSourceFactory(MeloMediaSourceFactory(this, ProgressiveMediaSource.Factory(DefaultDataSource.Factory(this)),
                 ProgressiveMediaSource.Factory(youtube.kept).setLoadErrorHandlingPolicy(ResilientLoadPolicy())))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_NETWORK).build()
@@ -113,6 +70,7 @@ class MeloPlaybackService : MediaLibraryService() {
             MusicSource.Spotify -> "spotify_catalog"
             MusicSource.YouTubeMusic -> "youtube_music"
             MusicSource.Local -> "local"
+            MusicSource.Addon -> "addon"
         }
         fun recordTrackStart() {
             val id = player.currentMediaItem?.mediaId ?: return
@@ -169,7 +127,9 @@ class MeloPlaybackService : MediaLibraryService() {
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
                 finishBuffering()
-                lastTelemetryTrack = null
+                // A track switched to a better copy is the same play, not a new one.
+                if (reason != androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED ||
+                    mediaItem?.mediaId != lastTelemetryTrack) lastTelemetryTrack = null
                 if (player.isPlaying) {
                     finishListeningSegment(restart = true)
                     recordTrackStart()
@@ -177,6 +137,16 @@ class MeloPlaybackService : MediaLibraryService() {
             }
             override fun onPlayerError(error: PlaybackException) {
                 finishBuffering()
+                // An add-on copy that fails mid-play gives way to YouTube Music, at the same position.
+                val failed = player.currentMediaItem
+                // A switched copy is put back by LosslessUpgrader instead.
+                if (failed != null && YouTubeUris.isYouTube(failed.localConfiguration?.uri) &&
+                    !LosslessUpgrade.isMarked(failed.localConfiguration?.uri) &&
+                    AddonPlayback.served.remove(failed.mediaId) != null) {
+                    `in`.melo.data.addons.AddonResolver.forget(failed.mediaId)
+                    player.prepare()
+                    return
+                }
                 UsageAnalytics.playbackError(this@MeloPlaybackService, telemetryCatalog(), errorCategory(error))
                 finishListeningSegment()
                 updatePlaybackPresence()
@@ -192,17 +162,21 @@ class MeloPlaybackService : MediaLibraryService() {
             ExoPlayer.PreloadConfiguration(NEXT_TRACK_PRELOAD_US)
         } else ExoPlayer.PreloadConfiguration.DEFAULT
         player.addAnalyticsListener(PlaybackDiagnostics)
-        preloader = QueuePreloader(this, player, http, recentAudioWriter, effectsScope, audio, youtube.recent).also { it.start() }
-        recovery = PlaybackRecovery(this, player, effectsScope, audio).also { it.start() }
+        player.addAnalyticsListener(AudioPipelineTracker(player).also { it.start() })
+        preloader = QueuePreloader(this, player, effectsScope, youtube.recent).also { it.start() }
+        recovery = PlaybackRecovery(this, player, effectsScope).also { it.start() }
         behavior = PlaybackBehavior(this, player).also { it.start() }
+        discord = DiscordPresence(this, player, effectsScope).also { it.start() }
+        upgrader = LosslessUpgrader(this, player, effectsScope).also { it.start() }
         EqualizerRuntime.start(this, effectsScope)
         EqualizerRuntime.setAudioSessionId(player.audioSessionId)
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) = EqualizerRuntime.setAudioSessionId(audioSessionId)
-            // The first track's loudness is only known once its manifest is read, hence READY too.
+            // The first track's loudness may only be known once it is read, hence READY too.
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) = updateNormalization(player)
             override fun onPlaybackStateChanged(playbackState: Int) = updateNormalization(player)
         })
+        watchSleepTimer(player)
         val settings = SettingsStore.get(this)
         effectsScope.launch {
             settings.settings.map { it.audioNormalization to it.preloadUpcomingTracks }.distinctUntilChanged()
@@ -216,6 +190,56 @@ class MeloPlaybackService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         mediaSession = MediaLibrarySession.Builder(this, player, AutoCallback(this, effectsScope)).setSessionActivity(intent).build()
     }
+    /**
+     * Pauses when the sleep timer runs out, the last seconds faded down, or as the last song it
+     * allows ends. The player pauses that song at its very end, so none of the next one is heard.
+     */
+    private fun watchSleepTimer(player: ExoPlayer) {
+        effectsScope.launch {
+            SleepTimer.deadline.collectLatest { deadline ->
+                if (deadline == null) return@collectLatest
+                // Checked against the clock in short waits: a long one can oversleep a dozing CPU.
+                while (true) {
+                    val untilFade = deadline - SystemClock.elapsedRealtime() - SLEEP_FADE_MS
+                    if (untilFade <= 0) break
+                    kotlinx.coroutines.delay(untilFade.coerceAtMost(SLEEP_CHECK_MS))
+                }
+                val volume = player.volume
+                try {
+                    if (player.isPlaying) {
+                        val start = SystemClock.elapsedRealtime()
+                        while (true) {
+                            val left = deadline - SystemClock.elapsedRealtime()
+                            if (left <= 0) break
+                            player.volume = volume * (left.toFloat() / (deadline - start).coerceAtLeast(1)).coerceIn(0f, 1f)
+                            kotlinx.coroutines.delay(SLEEP_FADE_STEP_MS)
+                        }
+                    }
+                    player.pause()
+                } finally {
+                    player.volume = volume
+                }
+                SleepTimer.cancel()
+            }
+        }
+        effectsScope.launch {
+            SleepTimer.songsLeft.collect { player.pauseAtEndOfMediaItems = it == 1 }
+        }
+        player.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                if (reason == androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
+                    reason == androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) SleepTimer.songFinished()
+            }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady && SleepTimer.songsLeft.value == 1 &&
+                    reason == androidx.media3.common.Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) SleepTimer.cancel()
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                // The queue ran out first: nothing is left to pause.
+                if (playbackState == androidx.media3.common.Player.STATE_ENDED && SleepTimer.songsLeft.value > 0) SleepTimer.cancel()
+            }
+        })
+    }
     private fun updateNormalization(player: androidx.media3.common.Player) {
         val sink = normalizingSink ?: return
         val enabled = SettingsStore.get(this).settings.value.audioNormalization
@@ -224,6 +248,7 @@ class MeloPlaybackService : MediaLibraryService() {
         val factor = if (gain == null) 1f else TrackLoudness.linear(gain)
         if (factor != sink.factor) android.util.Log.i("MeloAudio", "normalization enabled=$enabled gain=${gain?.let { "%.1f".format(it) }}dB volume=${"%.2f".format(factor)}")
         sink.factor = factor
+        AudioPipeline.update { it.copy(normalizationGainDb = gain?.coerceAtMost(0f)) }
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -236,12 +261,12 @@ class MeloPlaybackService : MediaLibraryService() {
         behavior?.close(); behavior = null
         preloader?.close(); preloader = null
         recovery?.close(); recovery = null
+        discord?.close(); discord = null
+        upgrader?.close(); upgrader = null
         effectsScope.cancel()
         EqualizerRuntime.setAudioSessionId(0)
-        nativeAudio?.cancelPending()
+        AudioPipeline.reset()
         mediaSession?.run { player.release(); release() }; mediaSession = null
-        nativeAudio?.close(); nativeAudio = null
-        source?.close(); source = null
         super.onDestroy()
     }
 
@@ -262,7 +287,8 @@ class MeloPlaybackService : MediaLibraryService() {
             return YouTubeChain(recent, kept)
         }
         private const val NEXT_TRACK_PRELOAD_US = 30_000_000L
-        /** Instrumented tests only. */
-        @Volatile internal var currentNativeAudio: NativeAudioProvider? = null
+        private const val SLEEP_FADE_MS = 8_000L
+        private const val SLEEP_FADE_STEP_MS = 100L
+        private const val SLEEP_CHECK_MS = 30_000L
     }
 }

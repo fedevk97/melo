@@ -26,17 +26,6 @@ body:
     validations:
       required: true
 
-  - type: dropdown
-    id: runtime
-    attributes:
-      label: Native engine
-      options:
-        - APKM supplied with -PspotifyArtifact
-        - Extracted files in native-runtime/artifacts
-        - Built with -PnativeRuntime=false
-    validations:
-      required: true
-
   - type: textarea
     id: command
     attributes:

@@ -1,5 +1,6 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,16 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -97,19 +92,18 @@ internal fun AudioCacheScreen(model: MeloModel, navController: NavHostController
             CacheSort.TITLE -> entries.sortedBy { it.track.title.lowercase() }
         }
     }
-    Scaffold(
+    `in`.melo.presentation.components.MeloPageScaffold(
         topBar = {
             TopAppBar(
+                colors = `in`.melo.presentation.components.meloPageBarColors(),
                 title = { Text(stringResource(R.string.audio_cache_title), fontFamily = GoogleSansRounded, modifier = Modifier.padding(start = 8.dp)) },
                 navigationIcon = {
-                    FilledTonalIconButton(
-                        modifier = Modifier.padding(start = MeloLayout.Space3),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
+                    `in`.melo.presentation.components.MeloIconButton(
+                        icon = MeloIcons.ArrowBack,
+                        contentDescription = stringResource(R.string.common_back),
                         onClick = { navController.popBackStack() },
-                    ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.common_back)) }
+                        modifier = Modifier.padding(start = MeloLayout.Space2),
+                    )
                 },
             )
         },
@@ -123,6 +117,7 @@ internal fun AudioCacheScreen(model: MeloModel, navController: NavHostController
                 UsageCard(used, settings.audioCacheLimitMb * MB, free, entries)
             }
             item {
+                `in`.melo.presentation.components.MeloGroupedList {
                 var position by remember(settings.audioCacheLimitMb) {
                     mutableFloatStateOf(SIZE_STEPS_MB.indexOfFirst { it >= settings.audioCacheLimitMb }.coerceAtLeast(0).toFloat())
                 }
@@ -135,31 +130,23 @@ internal fun AudioCacheScreen(model: MeloModel, navController: NavHostController
                     onValueChangeFinished = { model.ui.setAudioCacheLimit(SIZE_STEPS_MB[position.roundToInt()]) },
                     valueText = { formatSize(SIZE_STEPS_MB[it.roundToInt()] * MB) },
                 )
-            }
-            item {
                 SwitchSettingItem(
                     stringResource(R.string.audio_cache_played_title),
                     stringResource(R.string.audio_cache_played_description),
                     settings.cachePlayedTracks,
                     { enabled -> model.ui.updateSettings { it.copy(cachePlayedTracks = enabled) } },
-                    leadingIcon = {},
+                    leadingIcon = null,
                 )
-            }
-            item {
                 SwitchSettingItem(
                     stringResource(R.string.audio_cache_preload_enabled_title),
                     stringResource(R.string.audio_cache_preload_enabled_description),
                     settings.preloadUpcomingTracks,
                     { enabled -> model.ui.updateSettings { it.copy(preloadUpcomingTracks = enabled) } },
-                    leadingIcon = {},
+                    leadingIcon = null,
                 )
-            }
-            item {
                 SwitchSettingItem(stringResource(R.string.audio_cache_mobile), stringResource(R.string.audio_cache_mobile_description), settings.preloadOnMobile,
-                    { enabled -> model.ui.updateSettings { it.copy(preloadOnMobile = enabled) } }, leadingIcon = {},
+                    { enabled -> model.ui.updateSettings { it.copy(preloadOnMobile = enabled) } }, leadingIcon = null,
                     enabled = settings.preloadUpcomingTracks)
-            }
-            item {
                 var count by remember(settings.preloadTracks) { mutableFloatStateOf(settings.preloadTracks.toFloat()) }
                 SliderSettingsItem(
                     label = stringResource(R.string.audio_cache_preload),
@@ -171,17 +158,21 @@ internal fun AudioCacheScreen(model: MeloModel, navController: NavHostController
                     valueText = { it.roundToInt().toString() },
                     enabled = settings.preloadUpcomingTracks,
                 )
+                }
             }
             item {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(sort == CacheSort.RECENT, { sort = CacheSort.RECENT }, { Text(stringResource(R.string.audio_cache_sort_recent)) })
-                    FilterChip(sort == CacheSort.SIZE, { sort = CacheSort.SIZE }, { Text(stringResource(R.string.audio_cache_sort_size)) })
-                    FilterChip(sort == CacheSort.TITLE, { sort = CacheSort.TITLE }, { Text(stringResource(R.string.audio_cache_sort_title)) })
+                    `in`.melo.presentation.components.MeloChip(stringResource(R.string.audio_cache_sort_recent), sort == CacheSort.RECENT, { sort = CacheSort.RECENT })
+                    `in`.melo.presentation.components.MeloChip(stringResource(R.string.audio_cache_sort_size), sort == CacheSort.SIZE, { sort = CacheSort.SIZE })
+                    `in`.melo.presentation.components.MeloChip(stringResource(R.string.audio_cache_sort_title), sort == CacheSort.TITLE, { sort = CacheSort.TITLE })
                 }
             }
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
+                    `in`.melo.presentation.components.MeloButton(
+                        text = stringResource(R.string.audio_cache_remove_selected, selected.size),
+                        modifier = Modifier.weight(1f),
+                        size = `in`.melo.presentation.components.MeloButtonSize.Medium,
                         enabled = selected.isNotEmpty(),
                         onClick = {
                             val ids = selected
@@ -191,13 +182,17 @@ internal fun AudioCacheScreen(model: MeloModel, navController: NavHostController
                                 revision++
                             }
                         },
-                    ) { Text(stringResource(R.string.audio_cache_remove_selected, selected.size)) }
-                    OutlinedButton(
+                    )
+                    `in`.melo.presentation.components.MeloButton(
+                        text = stringResource(R.string.audio_cache_select_all),
+                        modifier = Modifier.weight(1f),
+                        size = `in`.melo.presentation.components.MeloButtonSize.Medium,
+                        style = `in`.melo.presentation.components.MeloButtonStyle.Tonal,
                         enabled = entries.isNotEmpty(),
                         onClick = {
                             selected = if (selected.size == entries.size) emptySet() else entries.map { it.track.id }.toSet()
                         },
-                    ) { Text(stringResource(R.string.audio_cache_select_all)) }
+                    )
                 }
             }
             items(sorted, key = { it.track.id }) { entry ->
@@ -211,7 +206,7 @@ internal fun AudioCacheScreen(model: MeloModel, navController: NavHostController
 
 @Composable
 private fun UsageCard(used: Long, limit: Long, free: Long, entries: List<CachedAudio>) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = MeloLayout.PanelShape, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainer), shape = MeloLayout.PanelShape, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 stringResource(R.string.audio_cache_usage, formatSize(used), formatSize(limit)),
@@ -234,7 +229,7 @@ private fun UsageCard(used: Long, limit: Long, free: Long, entries: List<CachedA
 @Composable
 private fun CachedTrackRow(entry: CachedAudio, selected: Boolean, onToggle: () -> Unit) {
     Surface(
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainer),
         modifier = Modifier.fillMaxWidth().clip(MeloLayout.CardShape).clickable(onClick = onToggle),
     ) {
         Row(Modifier.padding(MeloLayout.Space3), verticalAlignment = Alignment.CenterVertically) {
@@ -243,9 +238,9 @@ private fun CachedTrackRow(entry: CachedAudio, selected: Boolean, onToggle: () -
                 contentAlignment = Alignment.Center,
             ) {
                 when {
-                    selected -> Icon(Icons.Rounded.Check, stringResource(R.string.audio_cache_selected), tint = MaterialTheme.colorScheme.primary)
+                    selected -> Icon(MeloIcons.Check, stringResource(R.string.audio_cache_selected), tint = MaterialTheme.colorScheme.primary)
                     entry.track.imageUrl != null -> AsyncImage(entry.track.imageUrl, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                    else -> Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else -> Icon(MeloIcons.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {

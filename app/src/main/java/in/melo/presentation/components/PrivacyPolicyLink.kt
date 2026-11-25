@@ -19,4 +19,4 @@ fun PrivacyPolicyLink() {
     }
 }
 
-private const val PRIVACY_POLICY_URL = "https://github.com/aarush-io/melo/blob/main/PRIVACY.md"
+internal const val PRIVACY_POLICY_URL = "https://github.com/aarush-io/melo/blob/main/PRIVACY.md"

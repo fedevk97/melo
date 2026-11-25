@@ -2,6 +2,7 @@
 
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.meloPainter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -85,7 +85,7 @@ fun AccountScreen(model: MeloModel, account: AccountUi) {
                     horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space3),
                 ) {
                     Icon(
-                        painterResource(R.drawable.ic_melo_mark), null,
+                        meloPainter(R.drawable.ic_melo_mark), null,
                         Modifier.size(MeloLayout.ArtHero), tint = colors.onSurface,
                     )
                     MeloWordmark()
@@ -97,10 +97,10 @@ fun AccountScreen(model: MeloModel, account: AccountUi) {
                 Text(stringResource(R.string.melo_intro_sources),
                     style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant)
                 Spacer(Modifier.height(MeloLayout.Space6))
-                MeloCard(shape = MeloLayout.PanelShape, color = colors.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+                MeloCard(shape = MeloLayout.PanelShape, color = `in`.melo.presentation.components.pageCardColor(colors.surfaceContainer), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(MeloLayout.PageGutter)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(painterResource(R.drawable.ic_source_spotify), null, Modifier.size(24.dp), tint = colors.primary)
+                            Icon(meloPainter(R.drawable.ic_source_spotify), null, Modifier.size(24.dp), tint = colors.primary)
                             Text("Spotify", Modifier.padding(start = MeloLayout.Space3).weight(1f), style = MaterialTheme.typography.titleLarge,
                                 fontFamily = GoogleSansRounded, fontWeight = FontWeight.SemiBold)
                             Surface(shape = CircleShape, color = colors.surfaceContainerHighest) {
@@ -225,7 +225,7 @@ private fun SignInForm(account: AccountUi, model: MeloModel, googleFailed: Boole
                         modifier = Modifier.fillMaxWidth().padding(top = MeloLayout.Space2),
                         size = MeloButtonSize.Large,
                         style = MeloButtonStyle.Outlined,
-                        leadingContent = { Icon(painterResource(R.drawable.ic_google), null, Modifier.size(MeloLayout.IconMedium)) },
+                        leadingContent = { Icon(meloPainter(R.drawable.ic_google), null, Modifier.size(MeloLayout.IconMedium)) },
                     )
                     MeloButton(
                         text = if (passwordMode) ctx.getString(R.string.login_use_code) else ctx.getString(R.string.login_use_password),

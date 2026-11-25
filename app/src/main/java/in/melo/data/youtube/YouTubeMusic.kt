@@ -249,11 +249,19 @@ object YouTubeMusic {
     @Synchronized internal fun cachedStream(videoId: String): YouTubeStream? =
         streams[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() + STREAM_MARGIN_MS }
 
-    @Synchronized internal fun forgetStream(videoId: String) { streams.remove(videoId) }
+    @Synchronized internal fun forgetStream(videoId: String) {
+        streams.keys.removeAll { it == videoId || it.startsWith("$videoId$CAPPED") }
+    }
 
-    /** Resolves the best audio-only format, trying each client until one hands back a usable address. */
-    internal fun stream(videoId: String, excluded: Set<String> = emptySet()): YouTubeStream {
-        if (excluded.isEmpty()) cachedStream(videoId)?.let { return it }
+    /**
+     * Resolves the best audio-only format, or with a [ceiling] the best one at or under it, trying
+     * each client until one hands back a usable address.
+     */
+    internal fun stream(videoId: String, excluded: Set<String> = emptySet(), ceiling: Long? = null): YouTubeStream {
+        val memo = if (ceiling == null) videoId else "$videoId$CAPPED$ceiling"
+        if (excluded.isEmpty()) synchronized(this) {
+            streams[memo]?.takeIf { it.expiresAtMs > System.currentTimeMillis() + STREAM_MARGIN_MS }
+        }?.let { return it }
         val clients = YouTubeClient.entries.filterNot { it.clientName in excluded }
         if (clients.isEmpty()) throw YouTubeFailure("No client could open this track.", "ALL_CLIENTS_EXCLUDED")
         val initial = visitorData
@@ -272,14 +280,14 @@ object YouTubeMusic {
         }
         val js = if (formats.any { it.url == null }) runCatching { playerScript(videoId) }.getOrNull() else null
         var last: Exception? = null
-        for (format in preferredOrder(formats)) {
+        for (format in preferredOrder(formats, ceiling)) {
             try {
                 val url = format.url ?: decipher.playableUrl(format, js)
                 val expires = url.toHttpUrlOrNull()?.queryParameter("expire")?.toLongOrNull()?.times(1000)
                     ?: (System.currentTimeMillis() + DEFAULT_LIFETIME_MS)
                 val resolved = YouTubeStream(videoId, url, client.userAgent, client.clientName, format.contentLength,
                     format.mimeType, format.bitrate, format.sampleRate, expires)
-                synchronized(this) { streams[videoId] = resolved }
+                synchronized(this) { streams[memo] = resolved }
                 return resolved
             } catch (failure: Exception) { last = failure }
         }
@@ -533,8 +541,15 @@ internal fun audioFormats(response: JSONObject): List<YouTubeFormat> {
 }
 
 /** Highest bitrate first; formats with a known length come first, since the player can then seek and cache them. */
-internal fun preferredOrder(formats: List<YouTubeFormat>): List<YouTubeFormat> =
-    formats.sortedWith(compareByDescending<YouTubeFormat> { it.contentLength > 0 }.thenByDescending { it.bitrate })
+internal fun preferredOrder(formats: List<YouTubeFormat>, ceiling: Long? = null): List<YouTubeFormat> {
+    val best = formats.sortedWith(compareByDescending<YouTubeFormat> { it.contentLength > 0 }.thenByDescending { it.bitrate })
+    if (ceiling == null) return best
+    // Under a cap: the best format that fits, then the rest from the smallest up.
+    val (fits, over) = best.partition { it.bitrate in 1..ceiling }
+    return fits + over.sortedBy { it.bitrate }
+}
+
+private const val CAPPED = "|"
 
 private val PARENTHETICAL = Regex("""[(\[][^)\]]*[)\]]""")
 private val NON_ALPHANUMERIC = Regex("""[^\p{L}\p{N}]+""")

@@ -50,6 +50,10 @@ internal class AppUpdater private constructor(context: Context) {
         .followSslRedirects(false).build()
     private val mutable = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state = mutable.asStateFlow()
+    private val newer = MutableStateFlow<GitHubRelease?>(null)
+
+    /** A newer release than this one, once a check has found it, whether or not its prompt was put off. */
+    val pendingRelease = newer.asStateFlow()
     private var job: Job? = null
     private val activeCall = AtomicReference<Call?>()
     private val directory get() = File(app.cacheDir, "updates").apply { mkdirs() }
@@ -71,6 +75,7 @@ internal class AppUpdater private constructor(context: Context) {
                 val release = withContext(Dispatchers.IO) { fetch("${GitHubRelease.API}/latest") }
                 val installed = Version.parse(BuildConfig.VERSION_NAME)
                 if (release != null && installed != null && Version.parse(release.tag)!! > installed) {
+                    newer.value = release
                     val due = UpdateReminder.isDue(release.tag, preferences.getString("hidden_version", null),
                         preferences.getString("hidden_date", null))
                     if (manual || due) mutable.value = UpdateState.Available(release)
@@ -207,6 +212,16 @@ internal class AppUpdater private constructor(context: Context) {
         }
         val current = signatures(installed)
         if (current.isEmpty() || current != signatures(archive)) throw IOException("APK signing certificate differs")
+    }
+
+    /** Brings back the prompt for the newer release found earlier, after it was put off. */
+    fun reopen() {
+        val release = newer.value ?: return
+        when (mutable.value) {
+            UpdateState.Idle, UpdateState.Current, UpdateState.Unconfigured, is UpdateState.Failed ->
+                mutable.value = UpdateState.Available(release)
+            else -> Unit
+        }
     }
 
     fun installerFailed() {

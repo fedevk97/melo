@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -21,8 +22,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import `in`.melo.presentation.utils.LocalReducedMotion
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.ui.theme.MeloLayout
+import `in`.melo.ui.theme.secondaryLabel
+import `in`.melo.ui.theme.label
 
 @Composable
 fun MeloListRow(
@@ -81,10 +82,12 @@ fun MeloListRow(
     val artworkShape: Shape = if (artist) MeloLayout.ArtistShape else MeloLayout.ArtworkShape
     val interactionSource = remember { MutableInteractionSource() }
 
-    MeloCard(
+    // A flat row, as Apple Music lists results: no card or rim, a pressed fill only while held.
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .scale(selectionScale)
+            .clip(MeloLayout.CardShape)
             .border(selectionBorderWidth, MaterialTheme.colorScheme.primary, MeloLayout.CardShape)
             .semantics { selected = isSelectionMode && isSelected }
             .combinedClickable(
@@ -94,7 +97,6 @@ fun MeloListRow(
                 onLongClick = onLongClick,
             )
             .meloPress(interactionSource),
-        shape = MeloLayout.CardShape,
     ) {
         Box(Modifier.fillMaxWidth().heightIn(min = MeloLayout.RowMinHeight)) {
             Row(
@@ -127,21 +129,21 @@ fun MeloListRow(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.label,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.secondaryLabel,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
                 MeloIconButton(
-                    icon = Icons.Rounded.PlayArrow,
+                    icon = MeloIcons.PlayArrow,
                     contentDescription = playContentDescription,
                     onClick = onPlayClick,
                     containerColor = playContainerColor,

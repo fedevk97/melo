@@ -8,7 +8,6 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
 import androidx.media3.session.MediaController
@@ -17,7 +16,6 @@ import `in`.melo.data.Music
 import `in`.melo.data.MusicKind
 import `in`.melo.data.SpotifyFailure
 import `in`.melo.data.isLocalTrack
-import `in`.melo.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,10 +93,33 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
         future.addListener({
             try {
                 controller = future.get().also { it.addListener(listener) }
-                pending?.let { (queue, index) -> pending = null; load(queue, index) } ?: controller?.let(::update)
+                val player = controller ?: return@addListener
+                when {
+                    pending != null -> pending?.let { (queue, index) -> pending = null; load(queue, index) }
+                    // A fresh service has nothing loaded: put back what was playing when Melo closed.
+                    player.mediaItemCount == 0 -> restore(player)
+                    else -> update(player)
+                }
             } catch (_: Exception) { mutableState.value = mutableState.value.copy(buffering = false, error = "The player could not start.") }
         }, ContextCompat.getMainExecutor(context))
         scope.launch { while (true) { delay(300); controller?.let(::update) } }
+    }
+    /**
+     * Loads the queue Melo was left at without preparing it, so nothing is fetched until Play is
+     * pressed; the player then starts the same track at the same second.
+     */
+    private fun restore(player: Player) {
+        val snapshot = LastQueue.load(appContext)
+        if (snapshot == null) { update(player); return }
+        val tracks = snapshot.entries.map { it.track }
+        val queued = snapshot.entries.map { it.queued }
+        val (shown, earlier, later) = window(tracks, snapshot.index)
+        before = earlier; after = later
+        queueChanged = true
+        val from = windowStart(snapshot.index)
+        val items = shown.mapIndexed { i, track -> mediaItem(track, queued = queued[from + i]) }
+        player.setMediaItems(items, snapshot.index - from, snapshot.positionMs)
+        update(player)
     }
     fun play(queue: List<Music>, index: Int = 0) {
         val selected = queue.getOrNull(index) ?: return
@@ -355,6 +376,8 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
         before = emptyList(); after = emptyList()
         hasRadioRecommendations = false
         seenRadioRecommendationIds.clear()
+        savedLists = null; savedCurrent = null
+        LastQueue.clear(appContext)
         controller?.stop(); controller?.clearMediaItems(); mutableState.value = Playback(shuffle = ShuffleMemory.enabled)
     }
     fun pause() { controller?.pause() }
@@ -415,7 +438,50 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
             player.currentPosition.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
             ShuffleMemory.enabled, player.repeatMode, error, player.hasNextMediaItem() || after.isNotEmpty(), player.playWhenReady, currentAudioFormat(player),
             userQueue(player).size, hasRadioRecommendations, remainingContextTracks, contextTailId)
+        remember(player)
     }
+    /** What the queue looked like when it was last written down, compared by identity. */
+    private var savedLists: Triple<List<Music>, List<Music>, List<Music>>? = null
+    private var savedCurrent: String? = null
+    private var savedPosition = -1L
+    private var savedPlaying = false
+    /** Writes the queue down when it or the current track changes, and the position every few seconds. */
+    private fun remember(player: Player) {
+        val current = player.currentMediaItem?.mediaId ?: return
+        val lists = savedLists
+        if (lists == null || lists.first !== before || lists.second !== queue || lists.third !== after || current != savedCurrent) {
+            savedLists = Triple(before, queue, after)
+            savedCurrent = current
+            val window = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
+            val entries = before.map { LastQueue.Entry(it, false) } +
+                queue.mapIndexed { i, track -> LastQueue.Entry(track, window.getOrNull(i)?.isQueued() == true) } +
+                after.map { LastQueue.Entry(it, false) }
+            LastQueue.saveQueue(appContext, entries, before.size + player.currentMediaItemIndex)
+        }
+        val position = player.currentPosition
+        val playing = player.isPlaying
+        // Every few seconds while playing, and straight away when playback stops or seeks.
+        if (playing != savedPlaying || kotlin.math.abs(position - savedPosition) >= if (playing) 4_000 else 1) {
+            savedPlaying = playing
+            savedPosition = position
+            LastQueue.saveProgress(appContext, current, position)
+        }
+    }
+    private var ceilingAt = 0L
+    private var ceilingNow: Long? = null
+    /** The bitrate cap of the quality chosen for the connection in use, read at most once a second. */
+    private fun ceiling(): Long? {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (ceilingAt == 0L || now - ceilingAt > 1_000) {
+            ceilingAt = now
+            ceilingNow = `in`.melo.data.AudioQuality.current(
+                appContext, `in`.melo.data.preferences.SettingsStore.get(appContext).settings.value,
+            ).ceiling
+        }
+        return ceilingNow
+    }
+    /** The media item for [track] at the quality chosen for the connection in use. */
+    private fun mediaItem(track: Music, queued: Boolean = false): MediaItem = mediaItem(track, queued, ceiling())
     private companion object {
         const val WINDOW_BEHIND = 20
         const val WINDOW_AHEAD = 100
@@ -457,24 +523,20 @@ internal fun playbackErrorMessage(code: Int): String = when (code) {
     else -> "This track cannot be played. Try again or pick another track."
 }
 internal fun Music.isPlayableTrack(): Boolean = kind == MusicKind.Track &&
-    (id.startsWith("spotify:track:") || id.startsWith(`in`.melo.data.youtube.YTM_TRACK_PREFIX) || (isLocalTrack && mediaUri != null))
+    (id.startsWith("spotify:track:") || id.startsWith(`in`.melo.data.youtube.YTM_TRACK_PREFIX) ||
+        `in`.melo.data.addons.AddonUris.isAddonTrack(id) || (isLocalTrack && mediaUri != null))
 
 /** Set on the tracks the user queued ("Add to queue", "Play next"). */
 private const val QUEUED = "queued"
 private fun MediaItem.isQueued(): Boolean = mediaMetadata.extras?.getBoolean(QUEUED) == true
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-internal fun mediaItem(track: Music, queued: Boolean = false): MediaItem {
-    // YouTube Music tracks, and Spotify tracks without a Spotify account, are read from YouTube Music.
-    val youtube = YouTubeUris.of(track, `in`.melo.data.SpotifyAccount.signedIn)
-    val spotify = youtube == null && !track.isLocalTrack
+internal fun mediaItem(track: Music, queued: Boolean = false, ceiling: Long? = null): MediaItem {
+    // YouTube Music tracks and Spotify tracks are both read from YouTube Music; add-on rows and device files play directly.
+    val youtube = YouTubeUris.of(track)?.let { YouTubeUris.withCeiling(it, ceiling) }
     return MediaItem.Builder().setMediaId(track.id)
-        .setUri(youtube ?: track.mediaUri?.let(Uri::parse) ?: Uri.parse(track.id))
-        .apply { if (youtube != null) setCustomCacheKey(YouTubeUris.cacheKey(track.id)) }
-        .apply { if (spotify) setMimeType(MimeTypes.APPLICATION_M3U8) }
-        .apply { if (!BuildConfig.NATIVE_RUNTIME && spotify) setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
-            .setLicenseUri("https://spclient.wg.spotify.com/widevine-license/v1/audio/license")
-            .setMultiSession(true).setPlayClearContentWithoutKey(true).build()) }
+        .setUri(youtube ?: `in`.melo.data.addons.AddonUris.uriOf(track.id) ?: track.mediaUri?.let(Uri::parse) ?: Uri.parse(track.id))
+        .apply { if (youtube != null) setCustomCacheKey(YouTubeUris.cacheKey(track.id, ceiling)) }
         .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.subtitle)
             .setArtworkUri(`in`.melo.data.largestSpotifyImage(track.imageUrl)?.let(Uri::parse)).setIsPlayable(true).setIsBrowsable(false)
             .setExtras(Bundle().apply {

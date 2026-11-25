@@ -77,9 +77,17 @@ internal class SheetMotionController(
         )
     }
 
+    /** An open or close is under way. */
+    val isAnimating: Boolean get() = translationY.isRunning || expansionFraction.isRunning
+
+    /**
+     * Re-anchors a sheet at rest (or under the finger) when the collapsed position moves.
+     * Not for a sheet that [isAnimating]: snapping takes the mutex and would stop that open or
+     * close part-way, so the caller carries the animation on to the new anchor instead.
+     */
     suspend fun syncToExpansion(collapsedY: Float) {
         val adjustedY = collapsedY + (expandedY - collapsedY) * expansionFraction.value
-        if (translationY.value == adjustedY && !translationY.isRunning) return
+        if (translationY.value == adjustedY) return
         mutex.mutate {
             translationY.snapTo(adjustedY)
         }

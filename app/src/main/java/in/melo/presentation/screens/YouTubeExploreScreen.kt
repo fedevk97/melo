@@ -1,5 +1,11 @@
 package `in`.melo.presentation.screens
 
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.TopAppBarDefaults
+import `in`.melo.ui.theme.separator
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.activity.compose.BackHandler
@@ -30,9 +36,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -96,9 +99,15 @@ fun YouTubeExploreScreen(model: MeloModel, navController: NavHostController, pad
     var optionsFor by remember { mutableStateOf<Music?>(null) }
     BackHandler(enabled = state.selected != null) { model.closeYouTubeExploreCategory() }
     LaunchedEffect(model) { model.refreshYouTubeExplore() }
+    // The title scrolls away with the page rather than staying as a filled bar over
+    // it, leaving only a soft fade under the status bar.
+    val topBarScroll = `in`.melo.presentation.components.rememberScrolledUnder()
+    LaunchedEffect(state.selected?.key) { topBarScroll.reset() }
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().nestedScroll(topBarScroll.connection),
+        containerColor = `in`.melo.presentation.components.pageBackground(),
         topBar = {
+            Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(0, topBarScroll.offsetPx.toInt()) }) {
             HomeGradientTopBar(
                 onSettingsClick = { navController.navigateSafely(Screen.Settings.route) },
                 onHistoryClick = { navController.navigateSafely(Screen.History.route) },
@@ -107,8 +116,12 @@ fun YouTubeExploreScreen(model: MeloModel, navController: NavHostController, pad
                 spotifyProfile = spotifyProfile,
                 onProfileClick = { navController.navigateSafely(Screen.SettingsCategory.createRoute("account")) },
                 isScrolled = false,
+                transparentContainer = true,
                 settingsButtonDirect = true,
+                title = stringResource(R.string.explore_title),
             )
+            }
+            `in`.melo.presentation.components.StatusBarFade { topBarScroll.fraction }
         },
     ) { innerPadding ->
         PullToRefreshBox(
@@ -118,7 +131,7 @@ fun YouTubeExploreScreen(model: MeloModel, navController: NavHostController, pad
                 if (selected == null) model.refreshYouTubeExplore(force = true)
                 else model.selectYouTubeExploreCategory(selected)
             },
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            modifier = Modifier.fillMaxSize().background(`in`.melo.presentation.components.pageBackground()),
         ) {
             AnimatedContent(
                 targetState = state.selected?.key,
@@ -197,11 +210,6 @@ private fun ExploreCategoryGrid(
                     Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter).padding(bottom = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        stringResource(R.string.explore_title),
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
                     Text(
                         stringResource(R.string.explore_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
@@ -329,7 +337,7 @@ private fun ExploreCategoryPage(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.explore_back))
+                    Icon(MeloIcons.ArrowBack, stringResource(R.string.explore_back))
                 }
                 Text(
                     category.title,
@@ -339,7 +347,7 @@ private fun ExploreCategoryPage(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Icon(Icons.Rounded.Explore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(MeloIcons.Explore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (loading && shelves.isEmpty()) item(key = "explore_category_loading") { ListeningShelfPlaceholder() }
@@ -389,30 +397,19 @@ private fun ExploreCategoryPage(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ExplorePlaylistTile(item: Music, onClick: () -> Unit, onLongClick: () -> Unit) {
-    Column(
-        Modifier.width(148.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(MeloLayout.Space2),
+    `in`.melo.presentation.components.MeloShelfCard(
+        title = item.title,
+        subtitle = item.subtitle.ifBlank { item.kind.label },
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = Modifier.width(MeloLayout.ShelfCardWidth).padding(bottom = 4.dp),
+        titleLines = 2,
     ) {
-        Card(
-            shape = MeloLayout.ArtworkShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        ) {
-            SmartImage(
-                model = item.imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-            )
-        }
-        Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(
-            item.subtitle.ifBlank { item.kind.label },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        SmartImage(
+            model = item.imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }

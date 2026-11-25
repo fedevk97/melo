@@ -9,7 +9,7 @@ import java.security.MessageDigest
 
 /** One encrypted audio file of the CDN, as the media playlist describes it. */
 internal data class AudioFileRecord(val hex: String, val expectedBytes: Long, val playlistUrl: String) {
-    /** YouTube Music files are plain audio: nothing to prepare with the native engine. */
+    /** YouTube Music files are plain audio: nothing to prepare before playing them. */
     val isYouTube: Boolean get() = hex.startsWith(YOUTUBE_FILE_PREFIX)
 }
 

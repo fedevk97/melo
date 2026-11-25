@@ -16,8 +16,6 @@
     <string name="melo_connecting">Connexion à l’appareil…</string>
     <string name="melo_preparing">Préparation de la lecture…</string>
     <string name="melo_loading_audio">Chargement audio…</string>
-    <string name="melo_advanced">Avancé</string>
-    <string name="melo_advanced_description">Flou et rendu des angles</string>
     <string name="melo_audio_details">Détails audio</string>
     <string name="melo_loading_library">Chargement de votre musique…</string>
     <string name="melo_library_error_title">Impossible d’actualiser votre musique</string>

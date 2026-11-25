@@ -1,5 +1,8 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.MeloSegmentedControl
+import `in`.melo.presentation.icons.meloPainter
+import `in`.melo.ui.theme.controlFill
 import `in`.melo.SearchSource
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.AnimatedContent
@@ -26,6 +29,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,9 +39,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,7 +66,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -122,8 +122,10 @@ fun SearchScreen(
     val colorScheme = MaterialTheme.colorScheme
     val appSettings by ui.settings.collectAsStateWithLifecycle()
     val showSources = appSettings.showSearchSources
-    val searchSources = remember(discovery.spotifyEnabled) {
-        SearchSource.entries.filter { it != SearchSource.Spotify || discovery.spotifyEnabled }
+    val searchSources = remember(discovery.spotifyEnabled, discovery.addonsEnabled) {
+        SearchSource.entries.filter {
+            (it != SearchSource.Spotify || discovery.spotifyEnabled) && (it != SearchSource.Addons || discovery.addonsEnabled)
+        }
     }
     val activeSourceIndex = searchSources.indexOf(discovery.activeSource).coerceAtLeast(0)
     val nextSource = searchSources[(activeSourceIndex + 1) % searchSources.size]
@@ -153,7 +155,7 @@ fun SearchScreen(
             .collect { last -> if (discovery.hasMore && last >= listState.layoutInfo.totalItemsCount - 6) model.searchNext() }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().background(`in`.melo.presentation.components.pageBackground())) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
@@ -162,81 +164,25 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val inputColors = SearchBarDefaults.inputFieldColors(
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = MeloAlpha.Secondary),
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.primary
+                `in`.melo.presentation.components.MeloSearchField(
+                    query = searchQuery,
+                    onQueryChange = {
+                        searchQuery = it
+                        model.search(it)
+                    },
+                    onSearch = { query ->
+                        model.search(query, false)
+                        keyboard?.hide()
+                    },
+                    placeholder = stringResource(R.string.search_placeholder),
+                    clearDescription = stringResource(R.string.search_cd_clear_search_query),
+                    searchIconDescription = stringResource(R.string.search_cd_search_icon),
+                    modifier = Modifier.weight(1f),
                 )
-                Box(Modifier.weight(1f).background(Color.Transparent)) {
-                    DockedSearchBar(
-                        inputField = {
-                            SearchBarDefaults.InputField(
-                                query = searchQuery,
-                                onQueryChange = {
-                                    searchQuery = it
-                                    model.search(it)
-                                },
-                                onSearch = { query ->
-                                    model.search(query, false)
-                                    keyboard?.hide()
-                                },
-                                expanded = false,
-                                onExpandedChange = { onSearchBarActiveChange(false) },
-                                placeholder = {
-                                    Text(
-                                        stringResource(R.string.search_placeholder),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Search,
-                                        contentDescription = stringResource(R.string.search_cd_search_icon),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                trailingIcon = {
-                                    if (searchQuery.isNotBlank()) {
-                                        IconButton(
-                                            onClick = {
-                                                searchQuery = ""
-                                                model.search("")
-                                            },
-                                            modifier = Modifier
-                                                .size(48.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = MeloAlpha.Divider))
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Close,
-                                                contentDescription = stringResource(R.string.search_cd_clear_search_query),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                },
-                                colors = inputColors
-                            )
-                        },
-                        expanded = false,
-                        onExpandedChange = {},
-                        modifier = Modifier.meloPanel(MeloLayout.PillShape),
-                        colors = SearchBarDefaults.colors(
-                            containerColor = Color.Transparent,
-                            dividerColor = MaterialTheme.colorScheme.primary.copy(alpha = MeloAlpha.Divider),
-                            inputFieldColors = inputColors
-                        ),
-                        content = {}
-                    )
-                }
                 IconButton(
-                    modifier = Modifier.padding(bottom = MeloLayout.Space1).meloPanel(CircleShape),
+                    modifier = Modifier.size(MeloLayout.ControlVisual),
                     colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color.Transparent,
+                        containerColor = MaterialTheme.colorScheme.controlFill,
                         contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     onClick = {
@@ -255,7 +201,7 @@ fun SearchScreen(
                         label = "Search source logo",
                     ) { source ->
                         Icon(
-                            painter = painterResource(source.iconRes()),
+                            painter = meloPainter(source.iconRes()),
                             contentDescription = stringResource(R.string.search_source_picker_cd, activeSourceLabel),
                             tint = source.tint(),
                             modifier = Modifier.size(28.dp),
@@ -281,24 +227,19 @@ fun SearchScreen(
                         Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp)
                     ) {
                         val fits = maxWidth >= SOURCE_SEGMENT_MIN_WIDTH * searchSources.size
-                        SingleChoiceSegmentedButtonRow(
+                        // Too narrow for every source at a readable width: the selector keeps that
+                        // width and scrolls sideways.
+                        androidx.compose.foundation.layout.Box(
                             if (fits) Modifier.fillMaxWidth()
                             else Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())
                         ) {
-                            searchSources.forEachIndexed { index, source ->
-                                SegmentedButton(
-                                    selected = discovery.activeSource == source,
-                                    onClick = { model.setSearchSource(source) },
-                                    shape = SegmentedButtonDefaults.itemShape(index, searchSources.size),
-                                    icon = {},
-                                ) {
-                                    Text(
-                                        stringResource(source.labelRes()),
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
+                            MeloSegmentedControl(
+                                options = searchSources.map { stringResource(it.labelRes()) },
+                                selectedIndex = searchSources.indexOf(discovery.activeSource),
+                                onSelect = { model.setSearchSource(searchSources[it]) },
+                                modifier = if (fits) Modifier
+                                    else Modifier.width(SOURCE_SEGMENT_MIN_WIDTH * searchSources.size),
+                            )
                         }
                     }
                     FlowRow(
@@ -376,7 +317,7 @@ fun SearchScreen(
                 }
             }
         }
-        Box(
+        if (!`in`.melo.ui.glass.pagesUnderGlass()) Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
@@ -404,6 +345,7 @@ private fun SearchSource.labelRes(): Int = when (this) {
     SearchSource.Spotify -> R.string.search_source_spotify
     SearchSource.YouTubeMusic -> R.string.search_source_youtube_short
     SearchSource.Local -> R.string.search_source_device
+    SearchSource.Addons -> R.string.search_source_addons
 }
 
 private fun SearchSource.iconRes(): Int = when (this) {
@@ -411,6 +353,7 @@ private fun SearchSource.iconRes(): Int = when (this) {
     SearchSource.Spotify -> R.drawable.ic_source_spotify
     SearchSource.YouTubeMusic -> R.drawable.ic_source_youtube_music
     SearchSource.Local -> R.drawable.rounded_library_music_24
+    SearchSource.Addons -> R.drawable.outline_high_quality_24
 }
 
 @Composable
@@ -419,4 +362,5 @@ private fun SearchSource.tint(): Color = when (this) {
     SearchSource.Spotify -> Color(0xFF1DB954)
     SearchSource.YouTubeMusic -> Color(0xFFFF0033)
     SearchSource.Local -> MaterialTheme.colorScheme.onSurfaceVariant
+    SearchSource.Addons -> MaterialTheme.colorScheme.tertiary
 }

@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -35,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.ui.theme.MeloLayout
+import `in`.melo.ui.theme.controlFill
 
 enum class MeloButtonSize { Large, Medium }
 enum class MeloButtonStyle { Primary, Tonal, Outlined, Text }
@@ -56,12 +55,13 @@ fun MeloButton(
     val interactionSource = remember { MutableInteractionSource() }
     val activeContainer = when (style) {
         MeloButtonStyle.Primary -> containerColor ?: scheme.primary
-        MeloButtonStyle.Tonal -> containerColor ?: scheme.secondaryContainer
-        MeloButtonStyle.Outlined, MeloButtonStyle.Text -> containerColor ?: Color.Transparent
+        // iOS's grey see-through fill, so a secondary button reads the same on a page, a sheet or glass.
+        MeloButtonStyle.Tonal, MeloButtonStyle.Outlined -> containerColor ?: scheme.controlFill
+        MeloButtonStyle.Text -> containerColor ?: Color.Transparent
     }
     val activeContent = when (style) {
         MeloButtonStyle.Primary -> contentColor ?: scheme.onPrimary
-        MeloButtonStyle.Tonal -> contentColor ?: scheme.onSecondaryContainer
+        MeloButtonStyle.Tonal -> contentColor ?: scheme.onSurface
         MeloButtonStyle.Outlined, MeloButtonStyle.Text -> contentColor ?: scheme.primary
     }
     val buttonColors = when (style) {
@@ -140,7 +140,7 @@ fun MeloButton(
             enabled = enabled,
             shape = MeloLayout.PillShape,
             colors = buttonColors,
-            border = BorderStroke(1.dp, if (enabled) scheme.outlineVariant else scheme.outlineVariant.copy(alpha = MeloAlpha.Disabled)),
+            border = null,
             contentPadding = PaddingValues(horizontal = MeloLayout.Space4),
             interactionSource = interactionSource,
             content = content,
@@ -165,7 +165,8 @@ fun MeloIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    /** Null for the page's glass, as iOS's round bar buttons; a colour for a filled button. */
+    containerColor: Color? = null,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -185,8 +186,8 @@ fun MeloIconButton(
     ) {
         androidx.compose.foundation.layout.Box(
             modifier = Modifier.size(MeloLayout.ControlVisual)
-                .clip(MeloLayout.PillShape)
-                .background(containerColor),
+                .then(if (containerColor == null) Modifier.meloPageGlass(MeloLayout.PillShape)
+                else Modifier.clip(MeloLayout.PillShape).background(containerColor)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -197,3 +198,17 @@ fun MeloIconButton(
         }
     }
 }
+
+/** A round or rounded icon button's secondary look: [controlFill] under the page's ink, as iOS's grey buttons. */
+@Composable
+fun meloTonalIconColors(): androidx.compose.material3.IconButtonColors = IconButtonDefaults.filledTonalIconButtonColors(
+    containerColor = MaterialTheme.colorScheme.controlFill,
+    contentColor = MaterialTheme.colorScheme.onSurface,
+)
+
+/** The same for a text button. */
+@Composable
+fun meloTonalButtonColors(): androidx.compose.material3.ButtonColors = ButtonDefaults.filledTonalButtonColors(
+    containerColor = MaterialTheme.colorScheme.controlFill,
+    contentColor = MaterialTheme.colorScheme.onSurface,
+)

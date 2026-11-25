@@ -1,5 +1,8 @@
 package `in`.melo.presentation.components.player
 
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.ui.theme.selectedFill
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,8 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -91,7 +92,7 @@ internal fun PlayerArtistPickerBottomSheet(
         else -> stringResource(R.string.artist_picker_count_multiple, shortcutItems.size)
     }
 
-    ModalBottomSheet(
+    `in`.melo.presentation.components.MeloBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = {
@@ -99,7 +100,6 @@ internal fun PlayerArtistPickerBottomSheet(
                 color = colorScheme.onSurfaceVariant.copy(alpha = MeloAlpha.Disabled)
             )
         },
-        containerColor = colorScheme.surfaceContainerHigh,
     ) {
         Column(
             modifier = Modifier
@@ -149,9 +149,9 @@ private fun PlayerArtistShortcutCard(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val containerColor = if (isPrimary) {
-        colorScheme.secondaryContainer
+        colorScheme.selectedFill
     } else {
-        colorScheme.surfaceContainerLow
+        colorScheme.controlFill
     }
     val contentColor = if (isPrimary) {
         colorScheme.onSecondaryContainer
@@ -251,7 +251,7 @@ private fun PlayerArtistShortcutCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                    imageVector = MeloIcons.ArrowForward,
                     contentDescription = null,
                     tint = contentColor
                 )

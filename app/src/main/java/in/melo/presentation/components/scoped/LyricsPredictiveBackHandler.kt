@@ -16,6 +16,8 @@ fun LyricsPredictiveBackHandler(
     enabled: Boolean,
     onProgressChanged: (Float) -> Unit,
     animationDurationMs: Int = 350,
+    /** Hand off at once on release, with the preview undone, for a caller that plays its own exit. */
+    commitImmediately: Boolean = false,
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -29,7 +31,11 @@ fun LyricsPredictiveBackHandler(
                     onProgressChanged(backEvent.progress)
                 }
                 
-                scope.launch {
+                if (commitImmediately) {
+                    progressAnim.snapTo(0f)
+                    onProgressChanged(0f)
+                    onBack()
+                } else scope.launch {
                     progressAnim.animateTo(
                         targetValue = 1f,
                         animationSpec = tween(animationDurationMs / 2)

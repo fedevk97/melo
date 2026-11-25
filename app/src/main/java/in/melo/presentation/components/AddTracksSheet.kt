@@ -1,5 +1,7 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.glass.MeloSegmentedControl
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,10 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -89,21 +87,20 @@ fun AddTracksSheet(
         catch (_: Exception) { emptyList() }
         loading = false
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    `in`.melo.presentation.components.MeloBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(MeloLayout.Space3)) {
             Text(stringResource(R.string.playlist_add_tracks_to, playlist.title), Modifier.padding(start = 8.dp),
                 style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Rounded.Search, null) }, placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                leadingIcon = { Icon(MeloIcons.Search, null) }, placeholder = { Text(stringResource(R.string.search_placeholder)) },
                 shape = MeloLayout.PillShape,
             )
-            if (sources.size > 1) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                sources.forEachIndexed { index, (key, label) ->
-                    SegmentedButton(selected = source == key, onClick = { source = key },
-                        shape = SegmentedButtonDefaults.itemShape(index, sources.size)) { Text(stringResource(label), maxLines = 1) }
-                }
-            }
+            if (sources.size > 1) MeloSegmentedControl(
+                options = sources.map { stringResource(it.second) },
+                selectedIndex = sources.indexOfFirst { it.first == source },
+                onSelect = { source = sources[it].first },
+            )
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             LazyColumn(Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 520.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(results, key = { it.id }) { track ->
@@ -123,7 +120,7 @@ fun AddTracksSheet(
                             enabled = !done && adding == null,
                             colors = if (done) IconButtonDefaults.filledTonalIconButtonColors(
                                 disabledContainerColor = MaterialTheme.colorScheme.primary, disabledContentColor = MaterialTheme.colorScheme.onPrimary,
-                            ) else IconButtonDefaults.filledTonalIconButtonColors(),
+                            ) else meloTonalIconColors(),
                             onClick = {
                                 if (!remote) { onAddLocal(listOf(track)); added = added + track.id }
                                 else {
@@ -136,7 +133,7 @@ fun AddTracksSheet(
                                     }
                                 }
                             },
-                        ) { Icon(if (done) Icons.Rounded.Check else Icons.Rounded.Add, stringResource(R.string.playlist_add_tracks)) }
+                        ) { Icon(if (done) MeloIcons.Check else MeloIcons.Add, stringResource(R.string.playlist_add_tracks)) }
                     }
                 }
             }

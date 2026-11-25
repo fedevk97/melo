@@ -39,10 +39,9 @@ jobs:
       - name: Check shared UI tokens
         run: bash scripts/check-ui-tokens.sh
 
-      # The Spotify engine comes from a user-supplied APKM and is never available in CI.
-      # This build compiles everything else, runs the JVM tests and lint.
+      # Compiles the app, runs the JVM tests and lint.
       - name: Build, test and lint
-        run: ./gradlew --no-daemon -PnativeRuntime=false :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 
       - name: Upload test and lint reports
         if: always()
@@ -54,8 +53,8 @@ jobs:
             app/build/reports/lint-results-debug.html
           if-no-files-found: ignore
 
-      - name: Upload APK (without the native engine)
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: melo-debug-no-engine
+          name: melo-debug
           path: app/build/outputs/apk/debug/app-debug.apk

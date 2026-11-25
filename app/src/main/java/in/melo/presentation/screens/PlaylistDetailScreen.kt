@@ -1,5 +1,7 @@
 package `in`.melo.presentation.screens
 
+import androidx.compose.ui.focus.focusRequester
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,28 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Sort
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.DragHandle
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.PushPin
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.rounded.Radio
-import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.SwapVert
-import androidx.compose.material.icons.rounded.SwapHoriz
 import `in`.melo.presentation.navigation.navigateSafely
 import `in`.melo.data.preferences.DetailAction
 import `in`.melo.data.preferences.DetailPage
 import `in`.melo.presentation.utils.shareMusic
 import `in`.melo.presentation.utils.spotifyShareUrl
-import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
@@ -123,7 +108,7 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
         model.withLocalFiles(content?.tracks.orEmpty()).mapIndexed { index, music -> index to music.toSong(music.id in saved) }
             .sortedForPlaylist(sort) { it.second.title }
     }
-    // Search inside this playlist, revealed by pulling down at the top of the list.
+    // Search inside this playlist, opened from the play row's round button.
     var filter by remember(playlistId) { mutableStateOf("") }
     val visible = remember(ordered, filter) { ordered.filter { it.second.matchesPlaylistFilter(filter) } }
     val songs = remember(visible) { visible.map { it.second } }
@@ -174,7 +159,7 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
     var converting by remember { mutableStateOf(false) }
     var selectedIndex by remember { mutableStateOf(-1) }
     var selected by remember { mutableStateOf<Song?>(null) }
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = PLAYLIST_FILTER_ITEMS)
+    val listState = rememberLazyListState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     // Stable identities let a track appearing twice be dragged without the list jumping.
     val rowKeys = remember(songs) {
@@ -204,7 +189,8 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
         else -> null
     }
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-        val first = PLAYLIST_FILTER_ITEMS + 1
+        // The songs start after the header item.
+        val first = 1
         if (from.index >= first && to.index >= first) model.localPlaylistStore.move(playlistId, from.index - first, to.index - first)
     }
 
@@ -212,13 +198,7 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
     LaunchedEffect(sort, filter.isBlank(), content?.nextPage, detail?.loading) {
         if ((sort != PlaylistSort.DEFAULT || filter.isNotBlank()) && content?.nextPage != null && detail?.loading != true) model.loadDetail(item, more = true)
     }
-    LaunchedEffect(sort) { listState.scrollToItem(if (filter.isBlank()) PLAYLIST_FILTER_ITEMS else 0) }
-    // A list shorter than the screen cannot start below the search field: hide it once the tracks are there.
-    LaunchedEffect(ordered.isNotEmpty()) {
-        if (ordered.isNotEmpty() && filter.isBlank() && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-            listState.scrollToItem(PLAYLIST_FILTER_ITEMS)
-        }
-    }
+    LaunchedEffect(sort) { listState.scrollToItem(0) }
 
     LaunchedEffect(listState, songs.size, content?.nextPage) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
@@ -234,41 +214,46 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
     }
     CollectionDetailLayout(
         current.copy(subtitle = sourceName.orEmpty()),
-        displayedTrackCount, ui, navController, listState, hiddenLeadingItems = PLAYLIST_FILTER_ITEMS,
+        displayedTrackCount, ui, navController, listState,
     ) {
-        item(key = "playlist_filter") { PlaylistFilterField(filter, enabled = !reordering) { filter = it } }
         item(key = "playlist_actions") {
+            DetailPlayRow(
+                onPlay = { ui.playItem(current) },
+                onShuffle = { ui.shuffleItem(current) },
+                enabled = content == null || ordered.isNotEmpty(),
+                search = if (reordering) null else PlayRowSearch(filter) { filter = it },
+            )
             val shareContext = LocalContext.current
             val editable = isLocalList || isOwned || ownsYouTube
             val actions = buildList {
                 add(downloadAction(ui, current))
-                if (editable) add(ActionSpec(DetailAction.ADD_TRACKS, Icons.Rounded.Add, stringResource(R.string.playlist_add_tracks),
+                if (editable) add(ActionSpec(DetailAction.ADD_TRACKS, MeloIcons.Add, stringResource(R.string.playlist_add_tracks),
                     { addingTracks = true }, enabled = isLocalList || online))
                 if (!isLocalList && !isYouTubeList && !isLiked && discovery.spotifyEnabled) add(ActionSpec(DetailAction.SAVE,
-                    if (playlistId in saved) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    if (playlistId in saved) MeloIcons.Favorite else MeloIcons.FavoriteBorder,
                     stringResource(if (playlistId in saved) R.string.saved_remove else R.string.saved_add), { model.toggleFavorite(current) },
                     selected = playlistId in saved))
-                add(ActionSpec(DetailAction.PIN, if (isPinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
+                add(ActionSpec(DetailAction.PIN, if (isPinned) MeloIcons.PushPinFill else MeloIcons.PushPin,
                     stringResource(if (isPinned) R.string.pin_remove else R.string.pin_add_home), { ui.togglePin(current) }, selected = isPinned))
-                add(ActionSpec(DetailAction.SORT, Icons.AutoMirrored.Rounded.Sort, stringResource(R.string.playlist_sort), { sortMenu = true }))
-                if (isLocalList) add(ActionSpec(DetailAction.REORDER, Icons.Rounded.SwapVert, stringResource(R.string.reorder),
+                add(ActionSpec(DetailAction.SORT, MeloIcons.Sort, stringResource(R.string.playlist_sort), { sortMenu = true }))
+                if (isLocalList) add(ActionSpec(DetailAction.REORDER, MeloIcons.SwapVert, stringResource(R.string.reorder),
                     { reordering = !reordering; if (reordering) filter = ""; if (reordering && sort != PlaylistSort.DEFAULT) { sort = PlaylistSort.DEFAULT; ui.setPlaylistSort(playlistId, sort) } },
                     selected = reordering))
-                if (editable) add(ActionSpec(DetailAction.EDIT, Icons.Rounded.Edit, stringResource(R.string.detail_edit), { renaming = true },
+                if (editable) add(ActionSpec(DetailAction.EDIT, MeloIcons.Edit, stringResource(R.string.detail_edit), { renaming = true },
                     enabled = isLocalList || online))
-                if (!isLocalList && !isYouTubeList && discovery.spotifyEnabled) add(ActionSpec(DetailAction.RADIO, Icons.Rounded.Radio, stringResource(R.string.radio_related),
+                if (!isLocalList && !isYouTubeList && discovery.spotifyEnabled) add(ActionSpec(DetailAction.RADIO, MeloIcons.Radio, stringResource(R.string.radio_related),
                     { ui.startRadio(current) { navController.openMusic(ui, it) } }))
-                if (current.spotifyShareUrl() != null) add(ActionSpec(DetailAction.SHARE, Icons.Rounded.Share, stringResource(R.string.detail_share),
+                if (current.spotifyShareUrl() != null) add(ActionSpec(DetailAction.SHARE, MeloIcons.Share, stringResource(R.string.detail_share),
                     { shareContext.shareMusic(current) }))
-                add(ActionSpec(DetailAction.EXPORT, Icons.Rounded.TableChart, stringResource(R.string.playlist_export_csv), { exportCsv(current) },
+                add(ActionSpec(DetailAction.EXPORT, MeloIcons.TableChart, stringResource(R.string.playlist_export_csv), { exportCsv(current) },
                     enabled = content != null))
-                if (playlistKind != null) add(ActionSpec(DetailAction.CONVERT, Icons.Rounded.SwapHoriz, stringResource(R.string.convert_to),
+                if (playlistKind != null) add(ActionSpec(DetailAction.CONVERT, MeloIcons.SwapHoriz, stringResource(R.string.convert_to),
                     { converting = true }, enabled = content != null && !content.tracks.isEmpty()))
-                if (isLocalList || (inSpotifyLibrary && !isLiked) || inYouTubeLibrary) add(ActionSpec(DetailAction.DELETE, Icons.Rounded.Delete,
+                if (isLocalList || (inSpotifyLibrary && !isLiked) || inYouTubeLibrary) add(ActionSpec(DetailAction.DELETE, MeloIcons.Delete,
                     stringResource(R.string.playlist_delete), { deleting = true }, destructive = true))
             }
             DetailActionBar(DetailPage.PLAYLIST, actions, ui)
-            if (reordering) Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (reordering) Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.playlist_reorder_hint), Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.bodyMedium)
                 TextButton(onClick = { reordering = false }) { Text(stringResource(R.string.playlist_reorder_done)) }
             }
@@ -313,7 +298,7 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
                             ReorderableItem(reorderState, key = rowKeys[index]) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = {}, modifier = Modifier.draggableHandle()) {
-                                        Icon(Icons.Rounded.DragHandle, stringResource(R.string.reorder))
+                                        Icon(MeloIcons.DragHandle, stringResource(R.string.reorder))
                                     }
                                     row(Modifier.weight(1f))
                                 }
@@ -339,7 +324,7 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
                                     Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(track.subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                MeloIconButton(Icons.Rounded.Add, stringResource(R.string.spotify_playlist_add_suggestion), onClick = {
+                                MeloIconButton(MeloIcons.Add, stringResource(R.string.spotify_playlist_add_suggestion), onClick = {
                                     addingSuggestion = track.id
                                     scope.launch {
                                         try {
@@ -391,23 +376,5 @@ fun PlaylistDetailScreen(model: MeloModel, navController: NavHostController, pla
     }
 }
 
-/** The search field item sits above the page's first visible item. */
-private const val PLAYLIST_FILTER_ITEMS = 1
-
 /** Title, artists or album contain every word of [query], ignoring case and accents. */
 internal fun Song.matchesPlaylistFilter(query: String): Boolean = `in`.melo.utils.matchesWords(query, title, displayArtist, album)
-
-@Composable
-private fun PlaylistFilterField(value: String, enabled: Boolean, onChange: (String) -> Unit) {
-    androidx.compose.material3.OutlinedTextField(
-        value = value, onValueChange = onChange, enabled = enabled, singleLine = true,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        placeholder = { Text(stringResource(R.string.playlist_filter_hint)) },
-        leadingIcon = { Icon(Icons.Rounded.Search, null) },
-        trailingIcon = if (value.isNotEmpty()) ({
-            MeloIconButton(Icons.Rounded.Close, stringResource(R.string.playlist_filter_clear), onClick = { onChange("") })
-        }) else null,
-        shape = MeloLayout.PillShape,
-        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
-    )
-}

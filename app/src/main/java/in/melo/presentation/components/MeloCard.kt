@@ -16,19 +16,25 @@ import `in`.melo.ui.theme.MeloLayout
 fun MeloCard(
     modifier: Modifier = Modifier,
     shape: Shape = MeloLayout.CardShape,
-    color: Color = MaterialTheme.colorScheme.surface,
+    color: Color = pageCardColor(MaterialTheme.colorScheme.surface),
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val panelModifier = (if (onClick != null) modifier.meloPress(interactionSource) else modifier)
+    // Inside a grouped list the card is just a row: no rim, no scale, a highlight on press.
+    val grouped = LocalMeloGrouped.current
+    val shape = if (grouped) androidx.compose.ui.graphics.RectangleShape else shape
+    val panelModifier = (if (onClick != null && !grouped) modifier.meloPress(interactionSource) else modifier)
         .meloPanel(shape, color)
+    val inner: @Composable () -> Unit = {
+        androidx.compose.runtime.CompositionLocalProvider(LocalMeloGrouped provides false) { content() }
+    }
     if (onClick == null) {
         Surface(
             modifier = panelModifier,
             shape = shape,
             color = Color.Transparent,
-        ) { content() }
+        ) { inner() }
     } else {
         Surface(
             onClick = onClick,
@@ -37,6 +43,6 @@ fun MeloCard(
             shape = shape,
             color = Color.Transparent,
             interactionSource = interactionSource,
-        ) { content() }
+        ) { inner() }
     }
 }

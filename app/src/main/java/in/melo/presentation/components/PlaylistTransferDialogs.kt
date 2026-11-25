@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.glass.MeloAlertDialog
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -8,7 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -56,7 +56,7 @@ fun ImportPlaylistDialog(model: MeloModel, onDismiss: () -> Unit, onImported: (M
             model.importCsv(text, name)
         }
     }
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(stringResource(R.string.playlist_import)) },
         text = {
@@ -132,7 +132,7 @@ fun rememberPlaylistCsvExport(model: MeloModel): (Music) -> Unit {
 /** Confirms, then deletes a multi-service playlist from the device or a Spotify playlist from the library. */
 @Composable
 fun DeletePlaylistDialog(model: MeloModel, item: Music, onDismiss: () -> Unit, onConfirmed: () -> Unit = {}) {
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.playlist_delete)) },
         text = {

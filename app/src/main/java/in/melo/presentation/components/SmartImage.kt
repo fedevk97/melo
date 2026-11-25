@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.meloPainter
 import android.graphics.Bitmap
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
@@ -25,7 +26,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.dp
@@ -182,7 +182,7 @@ fun SmartImage(
                 contentScale = contentScale,
                 colorFilter = colorFilter,
                 alpha = alpha,
-                error = painterResource(errorResId)
+                error = meloPainter(errorResId)
             )
         }
     }
@@ -262,7 +262,7 @@ private fun Placeholder(
         contentAlignment = Alignment.Center
     ) {
         Image(
-            painter = painterResource(drawableResId),
+            painter = meloPainter(drawableResId),
             contentDescription = contentDescription,
             colorFilter = ColorFilter.tint(iconColor),
             modifier = Modifier.size(32.dp),

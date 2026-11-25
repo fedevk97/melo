@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components.scoped
 
+import `in`.melo.presentation.components.MiniPlayerCorner
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.runtime.Composable
@@ -16,6 +17,25 @@ import `in`.melo.presentation.viewmodel.PlayerSheetState
 
 private const val PREDICTIVE_BACK_SWIPE_EDGE_LEFT = 0
 private const val PREDICTIVE_BACK_SWIPE_EDGE_RIGHT = 1
+
+// The panel's shape as it opens. It reaches the
+// window's width by 80 % and its bottom by 40 %, easing out, so the opening reads as one
+// panel growing rather than a box stretching evenly on every side.
+internal fun dialPanelWide(f: Float): Float {
+    val x = (f / 0.8f).coerceIn(0f, 1f)
+    return 1f - (1f - x) * (1f - x)
+}
+
+internal fun dialPanelDeep(f: Float): Float {
+    val x = (f / 0.4f).coerceIn(0f, 1f)
+    return 1f - (1f - x) * (1f - x)
+}
+
+/** The pill's corner gives way to a 22dp sheet corner, which squares off over the last tenth. */
+internal fun dialPanelCorner(pill: Dp, f: Float): Dp {
+    val sheet = 22.dp * (f / 0.8f).coerceIn(0f, 1f) * (1f - ((f - 0.9f) / 0.1f).coerceIn(0f, 1f))
+    return maxOf(pill * (1f - f), sheet)
+}
 
 internal data class SheetVisualState(
     val currentBottomPadding: Dp,
@@ -93,11 +113,11 @@ internal fun rememberSheetVisualState(
                     val targetBottom = androidx.compose.ui.util.lerp(
                         sheetCollapsedTargetY + miniHeightPx,
                         containerHeightPx,
-                        safeFraction
+                        dialPanelDeep(safeFraction)
                     )
                     (targetBottom - translationY).coerceAtLeast(0f)
                 } else {
-                    androidx.compose.ui.util.lerp(miniHeightPx, containerHeightPx, safeFraction)
+                    androidx.compose.ui.util.lerp(miniHeightPx, containerHeightPx, dialPanelDeep(safeFraction))
                 }
             } else {
                 0f
@@ -116,21 +136,14 @@ internal fun rememberSheetVisualState(
         currentSheetContentState
     ) {
         {
-            val collapsedCornerTarget = if (isNavBarHidden) {
-                32.dp
-            } else if (navBarStyle == NavBarStyle.DEFAULT) {
-                floatingNavBarCornerRadiusDp
-            } else if (navBarStyle == NavBarStyle.FULL_WIDTH) {
-                32.dp
-            } else {
-                floatingNavBarCornerRadiusDp
-            }
+            // A rounded rectangle, the same at every corner and with every nav bar style.
+            val collapsedCornerTarget = MiniPlayerCorner
 
             val effectiveFraction = playerContentExpansionFraction.value * (1f - predictiveBackCollapseProgress)
             val safeFraction = effectiveFraction.coerceIn(0f, 1f)
             val expandedTarget = 0.dp
             val calculatedNormally = if (showPlayerContentArea) {
-                lerp(collapsedCornerTarget, expandedTarget, safeFraction)
+                dialPanelCorner(collapsedCornerTarget, safeFraction)
             } else {
                 if (navBarStyle == NavBarStyle.DEFAULT) {
                     floatingNavBarCornerRadiusDp
@@ -165,22 +178,13 @@ internal fun rememberSheetVisualState(
         currentSheetContentState
     ) {
         {
-            val collapsedRadius = if (isNavBarHidden) {
-                32.dp
-            } else if (navBarStyle == NavBarStyle.DEFAULT) {
-                10.dp
-            } else if (navBarStyle == NavBarStyle.FULL_WIDTH) {
-                32.dp
-            } else {
-                floatingNavBarCornerRadiusDp
-            }
+            val collapsedRadius = MiniPlayerCorner
 
             val effectiveFraction = playerContentExpansionFraction.value * (1f - predictiveBackCollapseProgress)
             val safeFraction = effectiveFraction.coerceIn(0f, 1f)
             val calculatedNormally =
                 if (showPlayerContentArea) {
-                    val expandedTarget = 0.dp
-                    lerp(collapsedRadius, expandedTarget, safeFraction)
+                    dialPanelCorner(collapsedRadius, safeFraction)
                 } else {
                     if (!isPlayingState.value || !hasCurrentSongState.value) {
                         if (isNavBarHidden) {
@@ -205,7 +209,7 @@ internal fun rememberSheetVisualState(
                 if (navBarStyle == NavBarStyle.FULL_WIDTH) {
                     calculatedNormally
                 } else if (navBarStyle == NavBarStyle.DEFAULT) {
-                    lerp(10.dp, floatingNavBarCornerRadiusDp, swipeDismissProgress)
+                    MiniPlayerCorner
                 } else {
                     val baseCollapsedRadius = if (isNavBarHidden) 32.dp else floatingNavBarCornerRadiusDp
                     lerp(baseCollapsedRadius, floatingNavBarCornerRadiusDp, swipeDismissProgress)
@@ -217,7 +221,8 @@ internal fun rememberSheetVisualState(
     }
 
     val actualCollapsedStateHorizontalPadding =
-        if (navBarStyle == NavBarStyle.FULL_WIDTH) 14.dp else collapsedStateHorizontalPadding
+        // In line with the nav bar's edges under it.
+        if (navBarStyle == NavBarStyle.FULL_WIDTH) 20.dp else collapsedStateHorizontalPadding
     val collapsedStateHorizontalPaddingPx = remember(actualCollapsedStateHorizontalPadding, density) {
         with(density) { actualCollapsedStateHorizontalPadding.toPx() }
     }
@@ -234,7 +239,7 @@ internal fun rememberSheetVisualState(
             if (showPlayerContentArea) {
                 val effectiveFraction = playerContentExpansionFraction.value * (1f - predictiveBackCollapseProgress)
                 val safeFraction = effectiveFraction.coerceIn(0f, 1f)
-                androidx.compose.ui.util.lerp(collapsedStateHorizontalPaddingPx, 0f, safeFraction)
+                collapsedStateHorizontalPaddingPx * (1f - dialPanelWide(safeFraction))
             } else {
                 collapsedStateHorizontalPaddingPx
             }
@@ -251,7 +256,7 @@ internal fun rememberSheetVisualState(
             if (showPlayerContentArea) {
                 val effectiveFraction = playerContentExpansionFraction.value * (1f - predictiveBackCollapseProgress)
                 val safeFraction = effectiveFraction.coerceIn(0f, 1f)
-                androidx.compose.ui.util.lerp(collapsedStateHorizontalPaddingPx, 0f, safeFraction)
+                collapsedStateHorizontalPaddingPx * (1f - dialPanelWide(safeFraction))
             } else {
                 collapsedStateHorizontalPaddingPx
             }

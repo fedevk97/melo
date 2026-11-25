@@ -39,22 +39,38 @@ private fun sans(size: Int, height: Int, weight: FontWeight = FontWeight.Normal,
     platformStyle = PlatformTextStyle(includeFontPadding = false),
 )
 
+/**
+ * Melo's type scale, after the iOS text styles Apple Music is set in.
+ *
+ * Big text is bold and drawn slightly tight; small text is drawn at neutral
+ * spacing so it stays readable. Each role has one job, so a page title, a
+ * section header or a row title is the same size on every screen:
+ *
+ * - headlineLarge: the large page title (Home, Library, Search).
+ * - headlineMedium: a page or sheet title once it is not the large one.
+ * - headlineSmall: a section header ("Recently played").
+ * - titleLarge: a smaller heading inside a section or card.
+ * - titleMedium: a row's or card's title.
+ * - titleSmall / labelLarge: emphasised small text and button labels.
+ * - bodyLarge / bodyMedium: running text and a row's second line.
+ * - bodySmall / labelMedium / labelSmall: captions, metadata and badges.
+ */
 val Typography = Typography(
-    displayLarge = sans(40, 46, FontWeight.ExtraBold, -1f),
-    displayMedium = sans(34, 40, FontWeight.Bold, -0.8f),
-    displaySmall = sans(34, 40, FontWeight.ExtraBold, -1f),
-    headlineLarge = sans(32, 38, FontWeight.ExtraBold, -0.8f),
-    headlineMedium = sans(28, 34, FontWeight.Bold, -0.6f),
-    headlineSmall = sans(24, 30, FontWeight.Bold, -0.5f),
-    titleLarge = sans(22, 28, FontWeight.Bold, -0.4f),
-    titleMedium = sans(17, 24, FontWeight.SemiBold, -0.2f),
-    titleSmall = sans(14, 20, FontWeight.Medium),
-    bodyLarge = sans(16, 24),
-    bodyMedium = sans(14, 21),
-    bodySmall = sans(12, 18),
-    labelLarge = sans(14, 20, FontWeight.Medium, 0.2f),
-    labelMedium = sans(12, 18, FontWeight.Medium, 0.5f),
-    labelSmall = sans(11, 16, FontWeight.Medium, 1f),
+    displayLarge = sans(38, 44, FontWeight.Bold, -0.6f),
+    displayMedium = sans(34, 41, FontWeight.Bold, -0.4f),
+    displaySmall = sans(34, 41, FontWeight.Bold, -0.4f),
+    headlineLarge = sans(34, 41, FontWeight.Bold, -0.4f),
+    headlineMedium = sans(28, 34, FontWeight.Bold, -0.3f),
+    headlineSmall = sans(22, 28, FontWeight.Bold, -0.25f),
+    titleLarge = sans(20, 25, FontWeight.Bold, -0.2f),
+    titleMedium = sans(17, 22, FontWeight.SemiBold, -0.2f),
+    titleSmall = sans(15, 20, FontWeight.SemiBold, -0.1f),
+    bodyLarge = sans(16, 22, spacing = -0.1f),
+    bodyMedium = sans(14, 19),
+    bodySmall = sans(12, 16),
+    labelLarge = sans(15, 20, FontWeight.SemiBold, -0.1f),
+    labelMedium = sans(13, 18, FontWeight.Medium),
+    labelSmall = sans(11, 13, FontWeight.SemiBold, 0.1f),
 )
 
 val ExpTitleTypography = Typography.copy(

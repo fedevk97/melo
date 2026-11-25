@@ -3,7 +3,7 @@ package `in`.melo.data
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** The card types Dial builds for its Top Picks row, represented with Melo's catalogue model. */
+/** The card types of the Top Picks row, in Melo's catalogue model. */
 enum class HomeRecommendationType {
     LATEST_RELEASE,
     PERSONAL_STATION,
@@ -68,6 +68,11 @@ data class YouTubeHomeState(
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val error: String? = null,
+    /**
+     * When the personalized feed last arrived from YouTube Music (0 while only the saved one is
+     * shown): the dials deal their round's tiles once it has.
+     */
+    val personalizedLoadedAt: Long = 0L,
 )
 
 /** A server-defined mood or genre card from YouTube Music Explore. */

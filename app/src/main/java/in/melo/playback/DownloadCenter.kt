@@ -7,31 +7,24 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.AtomicFile
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.offline.*
-import `in`.melo.BuildConfig
 import `in`.melo.MainActivity
 import `in`.melo.R
 import `in`.melo.data.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
-import java.io.IOException
 import java.util.concurrent.Executors
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 data class DownloadedTrack(
     val track: Music, val isComplete: Boolean, val percent: Float,
@@ -49,7 +42,6 @@ object DownloadCenter {
     private val failed = hashSetOf<String>()
     private val failures = hashMapOf<String, () -> Unit>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var helperUpstream: SpotifyHlsDataSource.Factory? = null
     private val mutable = MutableStateFlow<Map<String, DownloadedTrack>>(emptyMap())
     val downloads = mutable.asStateFlow()
     private val mutableCollections = MutableStateFlow<Map<String, CollectionProgress>>(emptyMap())
@@ -79,22 +71,15 @@ object DownloadCenter {
                 .getOrDefault(emptyList()).associateByTo(linkedMapOf()) { it.item.id }
             loaded = true
         }
-        val upstream = SpotifyHlsDataSource.Factory(application, nativeAudio = BuildConfig.NATIVE_RUNTIME, forDownloads = true).also { helperUpstream = it }
-        val recent = CacheDataSource.Factory().setCache(AudioCache.cache(application)).setCacheKeyFactory(AudioCache.keys)
-            .setCacheWriteDataSinkFactory(null).setUpstreamDataSourceFactory(upstream)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_FOR_UNSET_LENGTH_REQUESTS)
-        val writer = CacheDataSource.Factory().setCache(cache(application)).setCacheKeyFactory(AudioCache.keys)
-            .setUpstreamDataSourceFactory(recent).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_FOR_UNSET_LENGTH_REQUESTS)
         val executor = Executors.newFixedThreadPool(2)
-        val spotifyDownloads = DefaultDownloaderFactory(writer, executor)
-        // YouTube Music files have no length before they are opened: their own chain writes them whole.
+        // Every track is kept as its YouTube Music file. Those have no length before they are opened:
+        // the chain writes them whole. Earlier Spotify HLS requests only ever need removing, which a
+        // progressive downloader does by key; the sweep then releases their segments.
         val youtubeWriter = CacheDataSource.Factory().setCache(cache(application)).setCacheKeyFactory(AudioCache.keys)
             .setUpstreamDataSourceFactory(CacheDataSource.Factory().setCache(AudioCache.cache(application)).setCacheKeyFactory(AudioCache.keys)
                 .setCacheWriteDataSinkFactory(null).setUpstreamDataSourceFactory(YouTubeDataSource.Factory(application)))
         val downloaders = DownloaderFactory { request ->
-            if (request.uri.scheme == YouTubeUris.SCHEME) ProgressiveDownloader(
-                MediaItem.Builder().setUri(request.uri).setCustomCacheKey(request.customCacheKey).build(), youtubeWriter, executor,
-            ) else spotifyDownloads.createDownloader(request)
+            ProgressiveDownloader(MediaItem.Builder().setUri(request.uri).setCustomCacheKey(request.customCacheKey).build(), youtubeWriter, executor)
         }
         DownloadManager(application, DefaultDownloadIndex(AudioCache.database(application)), downloaders).also { created ->
             manager = created
@@ -109,7 +94,10 @@ object DownloadCenter {
                     val kept = records.values.flatMap { it.tracks }.mapTo(hashSetOf()) { it.id }
                     val orphaned = mutableListOf<String>()
                     downloadManager.downloadIndex.getDownloads().use { cursor -> while (cursor.moveToNext()) {
-                        if (cursor.download.request.id !in kept) orphaned.add(cursor.download.request.id)
+                        val request = cursor.download.request
+                        // Spotify HLS files from the native-engine builds can no longer play:
+                        // drop them, and their collections queue them again from YouTube Music.
+                        if (request.id !in kept || request.uri.scheme != YouTubeUris.SCHEME) orphaned.add(request.id)
                     } }
                     orphaned.forEach(downloadManager::removeDownload)
                     save(); publish()
@@ -139,9 +127,9 @@ object DownloadCenter {
         }
     }
 
-    /** Media3 removes HLS segments by reading the manifest back from this cache, but manifests
-     * bypass it (unset length): the segments of a removed download would stay on the device.
-     * Audio is keyed by file, so every audio key no live download refers to is released. */
+    /** Removed downloads can leave audio behind (the segments of earlier Spotify HLS downloads,
+     * which the progressive downloader cannot enumerate). Audio is keyed by file, so every audio
+     * key no live download refers to is released. */
     private fun sweepOrphanedAudio(context: Context, current: DownloadManager) {
         val store = cache(context)
         val index = AudioIndex.get(context)
@@ -238,38 +226,11 @@ object DownloadCenter {
         val context = checkNotNull(app)
         try {
             withContext(Dispatchers.IO) { AudioIndex.get(context).describe(track, played = false) }
-            // YouTube Music tracks, and Spotify tracks without an account, are kept as their YouTube Music file.
-            YouTubeUris.of(track, SpotifyAccount.signedIn)?.let { uri ->
-                val request = DownloadRequest.Builder(track.id, uri).setCustomCacheKey(YouTubeUris.cacheKey(track.id))
-                    .setData(encodePins(listOf(track)).toByteArray()).build()
-                if (records.values.any { record -> record.tracks.any { it.id == track.id } }) {
-                    current.addDownload(request)
-                    withTimeout(5_000) { while (current.downloadIndex.getDownload(track.id) == null) delay(50) }
-                }
-                return
-            }
-            val item = MediaItem.Builder().setUri(Uri.parse(track.id)).setMimeType(MimeTypes.APPLICATION_M3U8).build()
-            val request = suspendCancellableCoroutine<DownloadRequest> { continuation ->
-                val helper = DownloadHelper.forMediaItem(context, item, DefaultRenderersFactory(context), checkNotNull(helperUpstream))
-                continuation.invokeOnCancellation { scope.launch { helper.release() } }
-                helper.prepare(object : DownloadHelper.Callback {
-                    override fun onPrepared(helper: DownloadHelper, tracksInfoAvailable: Boolean) {
-                        try {
-                            val request = helper.getDownloadRequest(track.id, encodePins(listOf(track)).toByteArray())
-                            if (continuation.isActive) continuation.resume(request)
-                        } catch (failure: Exception) { if (continuation.isActive) continuation.resumeWithException(failure) }
-                        finally { helper.release() }
-                    }
-                    override fun onPrepareError(helper: DownloadHelper, e: IOException) {
-                        helper.release(); if (continuation.isActive) continuation.resumeWithException(e)
-                    }
-                })
-            }
-            if (BuildConfig.NATIVE_RUNTIME) {
-                val file = withContext(Dispatchers.IO) { checkNotNull(AudioIndex.get(context).record(track.id)?.file) }
-                OfflinePreparation.retain(context, file.hex)
-            }
-            // A user can cancel a collection while its manifest/key is being prepared.
+            // YouTube Music tracks and Spotify tracks are both kept as their YouTube Music file.
+            val uri = checkNotNull(YouTubeUris.of(track))
+            val request = DownloadRequest.Builder(track.id, uri).setCustomCacheKey(YouTubeUris.cacheKey(track.id))
+                .setData(encodePins(listOf(track)).toByteArray()).build()
+            // A user can cancel a collection while it is being prepared.
             if (records.values.any { record -> record.tracks.any { it.id == track.id } }) {
                 current.addDownload(request)
                 // Wait for the persistent index before selecting the next missing track.
@@ -331,7 +292,6 @@ class MeloDownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION, notification())
         if (worker?.isActive != true) worker = scope.launch {
-            var nativeLease: SpotifyNativeRuntime? = null
             val updates = launch { while (isActive) {
                 DownloadCenter.publish()
                 getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification())
@@ -339,16 +299,11 @@ class MeloDownloadService : Service() {
             } }
             try {
                 do {
-                    if (BuildConfig.NATIVE_RUNTIME && nativeLease == null && `in`.melo.data.NetworkMonitor.online.value && DownloadCenter.hasWork()) {
-                        try { nativeLease = SpotifyNativeRuntime.open(this@MeloDownloadService) }
-                        catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { /* Individual preparations expose a retryable error. */ }
-                    }
                     if (!DownloadCenter.prepareNext()) delay(500)
                 } while (DownloadCenter.hasWork())
             } finally {
                 updates.cancel()
-                withContext(NonCancellable + Dispatchers.IO) { nativeLease?.close(); AudioIndex.get(this@MeloDownloadService).flush() }
+                withContext(NonCancellable + Dispatchers.IO) { AudioIndex.get(this@MeloDownloadService).flush() }
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }

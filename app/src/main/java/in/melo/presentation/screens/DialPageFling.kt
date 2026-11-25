@@ -26,10 +26,11 @@ private const val ARTIST_DIAL_PAGE_KEY = "artist_dial"
  * on screen: then it settles on the dial or on what follows it, whichever the
  * glide would have left more of in view, so it never stops half-way.
  *
- * [restOffsetPx] is where a dial page sits, measured from the content's start
- * (the room the logo leaves above it) — both dials rest there, so the artists'
- * dial sits exactly where the speed dial does. [nextOffsetPx] is where
- * anything after the dials comes to rest, clear of the top bar.
+ * [restOffsetPx] is where the dial page with the given key sits, measured from
+ * the content's start: the speed dial where it is with the list at its top
+ * (under the mood chips), the artists' dial just under the title once the
+ * chips have scrolled away. [nextOffsetPx] is where anything after the dials
+ * comes to rest, clear of the top bar.
  * [artistPageFollows] says whether the speed dial has the artists' dial after it.
  *
  * Both the glide and the settle go by each frame's own time, see [runEven].
@@ -37,7 +38,7 @@ private const val ARTIST_DIAL_PAGE_KEY = "artist_dial"
 internal class DialPageFling(
     private val listState: LazyListState,
     private val decay: DecayAnimationSpec<Float>,
-    private val restOffsetPx: () -> Int,
+    private val restOffsetPx: (key: Any) -> Int,
     private val nextOffsetPx: () -> Int,
     private val artistPageFollows: () -> Boolean = { false },
 ) : FlingBehavior {
@@ -64,15 +65,14 @@ internal class DialPageFling(
      * below where the following item would rest. Null when no dial page does.
      */
     private fun straddlingPage(): Pair<Float, Float>? {
-        val dialRest = restOffsetPx()
         val next = nextOffsetPx()
         // Where whatever follows a dial page comes to rest.
         fun followingRest(key: Any) =
-            if (key in SPEED_DIAL_PAGE_KEYS && artistPageFollows()) dialRest else next
+            if (key in SPEED_DIAL_PAGE_KEYS && artistPageFollows()) restOffsetPx(ARTIST_DIAL_PAGE_KEY) else next
         val page = listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
-            isDial(item.key) && item.offset <= dialRest && item.offset + item.size > followingRest(item.key)
+            isDial(item.key) && item.offset <= restOffsetPx(item.key) && item.offset + item.size > followingRest(item.key)
         } ?: return null
-        return (page.offset - dialRest).toFloat() to (page.offset + page.size + listState.layoutInfo.mainAxisItemSpacing - followingRest(page.key)).toFloat()
+        return (page.offset - restOffsetPx(page.key)).toFloat() to (page.offset + page.size + listState.layoutInfo.mainAxisItemSpacing - followingRest(page.key)).toFloat()
     }
 
     /**

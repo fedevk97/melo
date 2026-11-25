@@ -1,5 +1,10 @@
 package `in`.melo.presentation.components.subcomps
 
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.ui.glass.MeloSwitch
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,17 +24,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
-import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
-import androidx.compose.material.icons.rounded.Abc
-import androidx.compose.material.icons.rounded.FormatAlignCenter
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.Translate
-import androidx.compose.material.icons.rounded.BrightnessHigh
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -39,7 +33,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import `in`.melo.presentation.components.MeloBottomSheet as ModalBottomSheet
 import androidx.compose.material3.SheetState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -98,7 +90,8 @@ fun LyricsMoreBottomSheet(
     onRepeatToggle: () -> Unit,
     onFavoriteToggle: () -> Unit,
     // Colors
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    /** Null wears the app's sheet material. */
+    containerColor: Color? = null,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     accentColor: Color = MaterialTheme.colorScheme.primary,
     onAccentColor: Color = MaterialTheme.colorScheme.onPrimary,
@@ -108,7 +101,7 @@ fun LyricsMoreBottomSheet(
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var showResetDialog by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(
+    `in`.melo.presentation.components.MeloBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         containerColor = containerColor,
@@ -148,7 +141,7 @@ fun LyricsMoreBottomSheet(
                         headlineContent = { Text(stringResource(R.string.lyrics_save_title)) },
                         leadingContent = {
                             Icon(
-                                painter = painterResource(R.drawable.outline_save_24),
+                                painter = meloPainter(R.drawable.outline_save_24),
                                 contentDescription = null
                             )
                         },
@@ -181,7 +174,7 @@ fun LyricsMoreBottomSheet(
                     headlineContent = { Text(stringResource(R.string.lyrics_reset_imported)) },
                     leadingContent = {
                         Icon(
-                            painter = painterResource(R.drawable.outline_restart_alt_24),
+                            painter = meloPainter(R.drawable.outline_restart_alt_24),
                             contentDescription = null
                         )
                     },
@@ -201,7 +194,7 @@ fun LyricsMoreBottomSheet(
             }
 
             if (showResetDialog) {
-                androidx.compose.material3.AlertDialog(
+                MeloAlertDialog(
                     onDismissRequest = { showResetDialog = false },
                     title = { Text(stringResource(R.string.lyrics_reset_dialog_title)) },
                     text = { Text(stringResource(R.string.lyrics_reset_dialog_message)) },
@@ -269,12 +262,12 @@ fun LyricsMoreBottomSheet(
                                 .height(48.dp),
                             active = lyricsAlignment == "left",
                             activeColor = accentColor,
-                            inactiveColor = containerColor,
+                            inactiveColor = containerColor ?: MaterialTheme.colorScheme.controlFill,
                             activeContentColor = onAccentColor,
                             inactiveContentColor = contentColor.copy(alpha = MeloAlpha.Secondary),
                             activeCornerRadius = 50.dp,
                             onClick = { onLyricsAlignmentChange("left") },
-                            imageVector = Icons.AutoMirrored.Rounded.FormatAlignLeft,
+                            imageVector = MeloIcons.FormatAlignLeft,
                             contentDesc = stringResource(R.string.lyrics_appearance_align_left)
                         )
 
@@ -284,12 +277,12 @@ fun LyricsMoreBottomSheet(
                                 .height(48.dp),
                             active = lyricsAlignment == "center",
                             activeColor = accentColor,
-                            inactiveColor = containerColor,
+                            inactiveColor = containerColor ?: MaterialTheme.colorScheme.controlFill,
                             activeContentColor = onAccentColor,
                             inactiveContentColor = contentColor.copy(alpha = MeloAlpha.Secondary),
                             activeCornerRadius = 50.dp,
                             onClick = { onLyricsAlignmentChange("center") },
-                            imageVector = Icons.Rounded.FormatAlignCenter,
+                            imageVector = MeloIcons.FormatAlignCenter,
                             contentDesc = stringResource(R.string.lyrics_appearance_align_center)
                         )
 
@@ -299,12 +292,12 @@ fun LyricsMoreBottomSheet(
                                 .height(48.dp),
                             active = lyricsAlignment == "right",
                             activeColor = accentColor,
-                            inactiveColor = containerColor,
+                            inactiveColor = containerColor ?: MaterialTheme.colorScheme.controlFill,
                             activeContentColor = onAccentColor,
                             inactiveContentColor = contentColor.copy(alpha = MeloAlpha.Secondary),
                             activeCornerRadius = 50.dp,
                             onClick = { onLyricsAlignmentChange("right") },
-                            imageVector = Icons.AutoMirrored.Rounded.FormatAlignRight,
+                            imageVector = MeloIcons.FormatAlignRight,
                             contentDesc = stringResource(R.string.lyrics_appearance_align_right)
                         )
                     }
@@ -353,7 +346,7 @@ fun LyricsMoreBottomSheet(
                             },
                             leadingContent = {
                                 Icon(
-                                    imageVector = Icons.Rounded.Tune,
+                                    imageVector = MeloIcons.Tune,
                                     contentDescription = null
                                 )
                             },
@@ -385,12 +378,12 @@ fun LyricsMoreBottomSheet(
                             headlineContent = { Text(stringResource(R.string.lyrics_controls_show_romanization)) },
                             leadingContent = {
                                 Icon(
-                                    imageVector = Icons.Rounded.Abc,
+                                    imageVector = MeloIcons.Abc,
                                     contentDescription = null
                                 )
                             },
                             trailingContent = {
-                                Switch(
+                                MeloSwitch(
                                     checked = showRomanization,
                                     onCheckedChange = onShowRomanizationChange,
                                     colors = SwitchDefaults.colors(
@@ -426,12 +419,12 @@ fun LyricsMoreBottomSheet(
                             headlineContent = { Text(stringResource(R.string.lyrics_controls_show_translations)) },
                             leadingContent = {
                                 Icon(
-                                    imageVector = Icons.Rounded.Translate,
+                                    imageVector = MeloIcons.Translate,
                                     contentDescription = null
                                 )
                             },
                             trailingContent = {
-                                Switch(
+                                MeloSwitch(
                                     checked = showTranslation,
                                     onCheckedChange = onShowTranslationChange,
                                     colors = SwitchDefaults.colors(
@@ -468,12 +461,12 @@ fun LyricsMoreBottomSheet(
                             headlineContent = { Text(stringResource(R.string.lyrics_controls_disable_immersive_once)) },
                             leadingContent = {
                                 Icon(
-                                    imageVector = Icons.Rounded.VisibilityOff,
+                                    imageVector = MeloIcons.VisibilityOff,
                                     contentDescription = null
                                 )
                             },
                             trailingContent = {
-                                Switch(
+                                MeloSwitch(
                                     modifier = Modifier,
                                     checked = isImmersiveTemporarilyDisabled,
                                     onCheckedChange = {
@@ -512,12 +505,12 @@ fun LyricsMoreBottomSheet(
                             headlineContent = { Text(stringResource(R.string.lyrics_controls_keep_screen_on)) },
                             leadingContent = {
                                 Icon(
-                                    imageVector = Icons.Rounded.BrightnessHigh,
+                                    imageVector = MeloIcons.BrightnessHigh,
                                     contentDescription = null
                                 )
                             },
                             trailingContent = {
-                                Switch(
+                                MeloSwitch(
                                     checked = keepScreenOn,
                                     onCheckedChange = onKeepScreenOnChange,
                                     colors = SwitchDefaults.colors(

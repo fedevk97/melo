@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.util.lerp
 
 /**
@@ -18,17 +19,27 @@ internal class FullPlayerVisualState(
     private val expansionFraction: Animatable<Float, AnimationVector1D>,
     private val initialOffsetY: Float
 ) {
-    /** Full-player fade-in: invisible until 25 % expanded, fully opaque at 100 %. */
+    /**
+     * Full-player fade-in: held for the first 6 % while the mini row
+     * is still there, then in over the next 20 %, together with the panel's fill.
+     */
     val contentAlpha: Float
         get() {
             val f = expansionFraction.value
-            return (f - 0.25f).coerceIn(0f, 0.75f) / 0.75f
+            return ((f - 0.06f) / 0.2f).coerceIn(0f, 1f)
         }
 
     /** Slide-up entrance driven by [contentAlpha]. */
     val translationY: Float
         get() = lerp(initialOffsetY, 0f, contentAlpha)
 }
+
+/**
+ * How far the full player is slid down this frame ([FullPlayerVisualState.translationY]), read at
+ * draw. The player's backdrop moves back up by it, so only the controls and artwork slide in: a
+ * backdrop sliding with them left a band of the sheet's own fill above it, a second top edge.
+ */
+internal val LocalFullPlayerSlide = staticCompositionLocalOf<() -> Float> { { 0f } }
 
 @Composable
 internal fun rememberFullPlayerVisualState(

@@ -47,6 +47,7 @@ object PlaylistCsv {
         MusicSource.Spotify -> "spotify"
         MusicSource.YouTubeMusic -> "youtube_music"
         MusicSource.Local -> "local"
+        MusicSource.Addon -> "addon"
     }
 
     private fun link(track: Music): String = when {

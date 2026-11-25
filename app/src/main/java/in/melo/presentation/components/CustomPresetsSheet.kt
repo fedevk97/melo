@@ -1,5 +1,8 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.ui.theme.selectedFill
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,11 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,10 +52,9 @@ fun CustomPresetsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    `in`.melo.presentation.components.MeloBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             modifier = Modifier
@@ -135,7 +132,7 @@ private fun CustomPresetItem(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                    .background(MaterialTheme.colorScheme.controlFill),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -159,21 +156,21 @@ private fun CustomPresetItem(
         Row {
              IconButton(onClick = onPinClick) {
                 Icon(
-                    imageVector = if (isPinned) Icons.Default.Star else Icons.Default.StarBorder,
+                    imageVector = if (isPinned) MeloIcons.Star else MeloIcons.StarBorder,
                     contentDescription = if (isPinned) stringResource(R.string.equalizer_presets_cd_unpin) else stringResource(R.string.equalizer_presets_cd_pin),
                     tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = onRenameClick) {
                 Icon(
-                    imageVector = Icons.Outlined.Edit,
+                    imageVector = MeloIcons.Edit,
                     contentDescription = stringResource(R.string.equalizer_presets_cd_rename),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = onDeleteClick) {
                 Icon(
-                    imageVector = Icons.Outlined.Delete,
+                    imageVector = MeloIcons.Delete,
                     contentDescription = stringResource(R.string.equalizer_presets_cd_delete),
                     tint = MaterialTheme.colorScheme.error
                 )

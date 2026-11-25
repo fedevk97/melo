@@ -1,5 +1,7 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,15 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -94,9 +86,9 @@ internal fun playlistKindName(kind: PlaylistKind): String = stringResource(when 
 
 @Composable
 private fun PlaylistKindIcon(kind: PlaylistKind, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.primary) = when (kind) {
-    PlaylistKind.Spotify -> Icon(painterResource(R.drawable.ic_source_spotify), null, modifier, tint = tint)
-    PlaylistKind.YouTubeMusic -> Icon(painterResource(R.drawable.ic_source_youtube_music), null, modifier, tint = tint)
-    PlaylistKind.MultiService -> Icon(Icons.Rounded.LibraryMusic, null, modifier, tint = tint)
+    PlaylistKind.Spotify -> Icon(meloPainter(R.drawable.ic_source_spotify), null, modifier, tint = tint)
+    PlaylistKind.YouTubeMusic -> Icon(meloPainter(R.drawable.ic_source_youtube_music), null, modifier, tint = tint)
+    PlaylistKind.MultiService -> Icon(MeloIcons.LibraryMusic, null, modifier, tint = tint)
 }
 
 /** "Convert to…": the destinations a playlist can go to, with the account each one needs. */
@@ -106,7 +98,7 @@ internal fun ConvertTargetSheet(model: MeloModel, item: Music, onDismiss: () -> 
     val google by model.youTubeAccount.collectAsStateWithLifecycle()
     val discovery by model.discovery.collectAsStateWithLifecycle()
     val targets = remember(item.id, google, discovery.spotifyEnabled) { model.conversionTargets(item) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    `in`.melo.presentation.components.MeloBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(MeloLayout.Space2)) {
             Text(stringResource(R.string.convert_to), Modifier.padding(start = 8.dp, bottom = 8.dp),
                 style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -150,16 +142,17 @@ fun ConvertScreen(model: MeloModel, navController: NavHostController, playlistId
     val session = conversion?.takeIf { it.source.id == playlistId && it.target == target }
     fun leave() { model.endConversion(); navController.popBackStack() }
     BackHandler { leave() }
-    Scaffold(
+    `in`.melo.presentation.components.MeloPageScaffold(
         topBar = {
             TopAppBar(
+                colors = `in`.melo.presentation.components.meloPageBarColors(),
                 title = {
                     Column {
                         Text(stringResource(R.string.convert_title), fontWeight = FontWeight.Bold)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(source.title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, Modifier.padding(horizontal = MeloLayout.Space2).size(14.dp))
+                            Icon(MeloIcons.ArrowForward, null, Modifier.padding(horizontal = MeloLayout.Space2).size(14.dp))
                             PlaylistKindIcon(target, Modifier.size(14.dp))
                             Text(playlistKindName(target), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
                         }
@@ -167,7 +160,7 @@ fun ConvertScreen(model: MeloModel, navController: NavHostController, playlistId
                 },
                 navigationIcon = {
                     MeloIconButton(
-                        icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                        icon = MeloIcons.ArrowBack,
                         contentDescription = stringResource(R.string.action_cancel),
                         onClick = ::leave,
                     )
@@ -223,8 +216,7 @@ private fun ConversionContent(model: MeloModel, navController: NavHostController
                         else -> Text(stringResource(R.string.convert_summary, state.tracks.size, state.rows.size), style = MaterialTheme.typography.bodyMedium)
                     }
                     if (state.toReview > 0) Row(verticalAlignment = Alignment.CenterVertically) {
-                        FilterChip(selected = onlyReview, onClick = { onlyReview = !onlyReview },
-                            label = { Text(stringResource(R.string.convert_to_review, state.toReview)) })
+                        `in`.melo.presentation.components.MeloChip(stringResource(R.string.convert_to_review, state.toReview), onlyReview, { onlyReview = !onlyReview })
                     }
                 }
             }
@@ -273,10 +265,10 @@ private fun ConversionContent(model: MeloModel, navController: NavHostController
 private fun ConversionRowItem(row: ConversionRow, enabled: Boolean, onOpen: () -> Unit, onRemove: () -> Unit, onRestore: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val background = when {
-        row.removed -> colors.surfaceContainerLow
+        row.removed -> `in`.melo.presentation.components.pageCardColor(colors.surfaceContainerLow)
         row.needsReview && row.choice == null -> colors.errorContainer
         row.needsReview -> colors.tertiaryContainer
-        else -> colors.surfaceContainer
+        else -> `in`.melo.presentation.components.pageCardColor(colors.surfaceContainer)
     }
     val content = when {
         row.removed -> colors.onSurfaceVariant
@@ -313,7 +305,7 @@ private fun ConversionRowItem(row: ConversionRow, enabled: Boolean, onOpen: () -
                                 Text(choice.subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        if (row.reviewed && !row.removed) Icon(Icons.Rounded.Check, null, Modifier.padding(start = MeloLayout.Space2).size(18.dp))
+                        if (row.reviewed && !row.removed) Icon(MeloIcons.Check, null, Modifier.padding(start = MeloLayout.Space2).size(18.dp))
                     }
                     else -> Text(stringResource(if (row.failed) R.string.convert_row_failed else R.string.convert_row_missing),
                         style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
@@ -322,8 +314,8 @@ private fun ConversionRowItem(row: ConversionRow, enabled: Boolean, onOpen: () -
                     style = MaterialTheme.typography.labelMedium)
             }
             if (row.state != MatchState.Searching) {
-                if (row.removed) MeloIconButton(Icons.AutoMirrored.Rounded.Undo, stringResource(R.string.convert_restore), onRestore, enabled = enabled)
-                else MeloIconButton(Icons.Rounded.Close, stringResource(R.string.convert_remove), onRemove, enabled = enabled)
+                if (row.removed) MeloIconButton(MeloIcons.Undo, stringResource(R.string.convert_restore), onRestore, enabled = enabled)
+                else MeloIconButton(MeloIcons.Close, stringResource(R.string.convert_remove), onRemove, enabled = enabled)
             }
         }
     }
@@ -353,7 +345,7 @@ private fun MatchPickerSheet(model: MeloModel, session: PlaylistConversion, row:
     }
     // Lazy list keys must be unique: a search can return the same track twice.
     val shown = (results ?: row.candidates).distinctBy(Music::id)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    `in`.melo.presentation.components.MeloBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(MeloLayout.Space3)) {
             Column(Modifier.padding(start = 8.dp)) {
                 Text(row.original.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -366,7 +358,7 @@ private fun MatchPickerSheet(model: MeloModel, session: PlaylistConversion, row:
             }
             if (searchSource != null) OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Rounded.Search, null) }, shape = MeloLayout.PillShape,
+                leadingIcon = { Icon(MeloIcons.Search, null) }, shape = MeloLayout.PillShape,
                 label = { Text(stringResource(R.string.convert_search_on, playlistKindName(session.target))) },
             )
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -392,7 +384,7 @@ private fun MatchPickerSheet(model: MeloModel, session: PlaylistConversion, row:
                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        MeloIconButton(Icons.Rounded.PlayArrow, stringResource(R.string.convert_listen), onClick = { model.play(listOf(candidate), 0) })
+                        MeloIconButton(MeloIcons.PlayArrow, stringResource(R.string.convert_listen), onClick = { model.play(listOf(candidate), 0) })
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.ui.theme.MeloLayout
 import androidx.compose.animation.animateColorAsState
@@ -29,7 +30,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -61,7 +61,7 @@ fun ToggleSegmentButton(
         onClick = onClick
     ) {
         Icon(
-            painter = painterResource(iconId),
+            painter = meloPainter(iconId),
             contentDescription = contentDesc,
             tint = if (active) activeContentColor else inactiveContentColor,
             modifier = Modifier.size(24.dp)

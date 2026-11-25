@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -7,8 +8,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +29,7 @@ import `in`.melo.data.model.Artist
 import `in`.melo.data.model.Playlist
 import `in`.melo.presentation.viewmodel.ColorSchemePair
 import `in`.melo.ui.theme.MeloLayout
+import `in`.melo.ui.theme.artworkOutline
 import `in`.melo.utils.formatSongCount
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -45,27 +45,24 @@ fun AlbumGridItemRedesigned(
     onLongPress: () -> Unit = {},
     onSelectionToggle: () -> Unit = {},
 ) {
-    Column(
-        Modifier.fillMaxWidth().clip(MeloLayout.CardShape)
-            .combinedClickable(role = Role.Button, onClick = { if (isSelectionMode) onSelectionToggle() else onClick() }, onLongClick = onLongPress)
-            .semantics { selected = isSelected },
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(MeloLayout.ArtworkShape).artworkRim(MeloLayout.ArtworkShape)) {
-            if (isLoading) ShimmerBox(Modifier.fillMaxSize())
-            else SmartImage(album.albumArtUriString, null, Modifier.fillMaxSize(), targetSize = coil.size.Size(512, 512))
+    if (isLoading) Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ShimmerBox(Modifier.fillMaxWidth().aspectRatio(1f).clip(MeloLayout.ArtworkShape))
+        ShimmerBox(Modifier.fillMaxWidth(0.7f).height(16.dp).clip(MeloLayout.ArtworkShape))
+        ShimmerBox(Modifier.fillMaxWidth(0.5f).height(14.dp).clip(MeloLayout.ArtworkShape))
+    } else MeloShelfCard(
+        title = album.title,
+        subtitle = album.artist,
+        onClick = { if (isSelectionMode) onSelectionToggle() else onClick() },
+        onLongClick = onLongPress,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).semantics { selected = isSelected },
+        overlay = {
             if (isSelected) {
                 Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary, MeloLayout.ArtworkShape))
                 SelectionMark(selectionIndex, Modifier.align(Alignment.TopEnd).padding(8.dp))
             }
-        }
-        if (isLoading) {
-            ShimmerBox(Modifier.fillMaxWidth(0.7f).height(18.dp).clip(MeloLayout.ArtworkShape))
-            ShimmerBox(Modifier.fillMaxWidth(0.5f).height(14.dp).clip(MeloLayout.ArtworkShape))
-        } else Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-            Text(album.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(album.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        },
+    ) {
+        SmartImage(album.albumArtUriString, null, Modifier.fillMaxSize(), targetSize = coil.size.Size(512, 512))
     }
 }
 
@@ -125,11 +122,11 @@ private fun LibraryArtworkRow(
         Modifier.fillMaxWidth().clip(MeloLayout.CardShape)
             .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
             .combinedClickable(role = Role.Button, onClick = onClick, onLongClick = onLongPress)
-            .semantics { this.selected = selected }.padding(horizontal = 8.dp, vertical = 8.dp),
+            .semantics { this.selected = selected }.padding(horizontal = MeloLayout.Space4, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (loading) ShimmerBox(Modifier.size(artSize).clip(shape))
-        else SmartImage(image, null, Modifier.size(artSize).artworkRim(shape), shape = shape, targetSize = SmartImageListTargetSize)
+        else SmartImage(image, null, Modifier.size(artSize).artworkOutline(shape), shape = shape, targetSize = SmartImageListTargetSize)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(MeloLayout.Space1)) {
             if (loading) {
                 ShimmerBox(Modifier.fillMaxWidth(0.7f).height(18.dp).clip(MeloLayout.ArtworkShape))
@@ -151,6 +148,6 @@ private fun LibraryArtworkRow(
 private fun SelectionMark(index: Int?, modifier: Modifier = Modifier) {
     Box(modifier.size(28.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
         if (index != null) Text(index.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary)
-        else Icon(Icons.Rounded.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
+        else Icon(MeloIcons.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
     }
 }

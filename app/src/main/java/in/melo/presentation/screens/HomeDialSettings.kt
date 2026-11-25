@@ -1,5 +1,8 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.MeloSegmentedControl
+import `in`.melo.ui.glass.MeloSwitch
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,9 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -22,7 +22,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import `in`.melo.presentation.components.MeloBottomSheet as ModalBottomSheet
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -90,51 +89,31 @@ internal fun HomeDialSettingsMenuContent(
             DialSwitchRow(stringResource(R.string.home_dial_mixes_dial), settings.homeMixesDialEnabled) {
                 onSettingsChange { copy(homeMixesDialEnabled = it) }
             }
+            DialSwitchRow(stringResource(R.string.home_dial_local_files), settings.homeDialLocalFiles) {
+                onSettingsChange { copy(homeDialLocalFiles = it) }
+            }
             DialSwitchRow(stringResource(R.string.home_dial_feeling_lucky), settings.homeLuckyTileEnabled) {
                 onSettingsChange { copy(homeLuckyTileEnabled = it) }
             }
             Text(stringResource(R.string.home_dial_source), style = MaterialTheme.typography.titleSmall)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf(
-                    AppSettings.DIAL_SOURCE_HISTORY to R.string.home_dial_source_history,
-                    AppSettings.DIAL_SOURCE_YOUTUBE to R.string.home_dial_source_youtube,
-                    AppSettings.DIAL_SOURCE_SPOTIFY to R.string.home_dial_source_spotify,
-                ).forEachIndexed { index, (source, label) ->
-                    SegmentedButton(
-                        selected = settings.homeDialSource == source,
-                        enabled = source != AppSettings.DIAL_SOURCE_SPOTIFY || spotifyConnected,
-                        onClick = { onSettingsChange { copy(homeDialSource = source) } },
-                        shape = SegmentedButtonDefaults.itemShape(index, 3),
-                        modifier = Modifier.weight(1f),
-                        icon = {},
-                    ) {
-                        Text(
-                            stringResource(label),
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+            val dialSources = listOf(
+                AppSettings.DIAL_SOURCE_HISTORY to R.string.home_dial_source_history,
+                AppSettings.DIAL_SOURCE_YOUTUBE to R.string.home_dial_source_youtube,
+                AppSettings.DIAL_SOURCE_SPOTIFY to R.string.home_dial_source_spotify,
+            )
+            MeloSegmentedControl(
+                options = dialSources.map { stringResource(it.second) },
+                selectedIndex = dialSources.indexOfFirst { it.first == settings.homeDialSource },
+                onSelect = { index -> onSettingsChange { copy(homeDialSource = dialSources[index].first) } },
+                optionEnabled = { index -> dialSources[index].first != AppSettings.DIAL_SOURCE_SPOTIFY || spotifyConnected },
+            )
             Text(stringResource(R.string.home_dial_rows), style = MaterialTheme.typography.titleSmall)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                (3..4).forEachIndexed { index, rows ->
-                    SegmentedButton(
-                        selected = settings.homeDialRows == rows,
-                        onClick = { onSettingsChange { copy(homeDialRows = rows) } },
-                        shape = SegmentedButtonDefaults.itemShape(index, 2),
-                        modifier = Modifier.weight(1f),
-                        icon = {},
-                    ) {
-                        Text(
-                            stringResource(R.string.home_dial_grid_value, rows),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
+            val rowChoices = listOf(3, 4)
+            MeloSegmentedControl(
+                options = rowChoices.map { stringResource(R.string.home_dial_grid_value, it) },
+                selectedIndex = rowChoices.indexOf(settings.homeDialRows),
+                onSelect = { index -> onSettingsChange { copy(homeDialRows = rowChoices[index]) } },
+            )
             DialSwitchRow(stringResource(R.string.home_dial_labels), settings.homeDialLabels) {
                 onSettingsChange { copy(homeDialLabels = it) }
             }
@@ -145,28 +124,16 @@ internal fun HomeDialSettingsMenuContent(
                 onSettingsChange { copy(homeDialNewReleaseTags = it) }
             }
             Text(stringResource(R.string.home_dial_tile_style), style = MaterialTheme.typography.titleSmall)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf(
-                    AppSettings.DIAL_TILE_STYLE_PLAIN to R.string.home_dial_tile_style_plain,
-                    AppSettings.DIAL_TILE_STYLE_EDGE to R.string.home_dial_tile_style_edge,
-                    AppSettings.DIAL_TILE_STYLE_GLASS to R.string.home_dial_tile_style_glass,
-                ).forEachIndexed { index, (style, label) ->
-                    SegmentedButton(
-                        selected = settings.homeDialTileStyle == style,
-                        onClick = { onSettingsChange { copy(homeDialTileStyle = style) } },
-                        shape = SegmentedButtonDefaults.itemShape(index, 3),
-                        modifier = Modifier.weight(1f),
-                        icon = {},
-                    ) {
-                        Text(
-                            stringResource(label),
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+            val tileStyles = listOf(
+                AppSettings.DIAL_TILE_STYLE_PLAIN to R.string.home_dial_tile_style_plain,
+                AppSettings.DIAL_TILE_STYLE_EDGE to R.string.home_dial_tile_style_edge,
+                AppSettings.DIAL_TILE_STYLE_GLASS to R.string.home_dial_tile_style_glass,
+            )
+            MeloSegmentedControl(
+                options = tileStyles.map { stringResource(it.second) },
+                selectedIndex = tileStyles.indexOfFirst { it.first == settings.homeDialTileStyle },
+                onSelect = { index -> onSettingsChange { copy(homeDialTileStyle = tileStyles[index].first) } },
+            )
         }
     }
 }
@@ -184,7 +151,7 @@ internal fun HomeDialSettingsSheet(
 ) {
     var ordered by remember(items, order) { mutableStateOf(orderDialItems(items, order)) }
     LaunchedEffect(items, order) { ordered = orderDialItems(items, order) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    `in`.melo.presentation.components.MeloBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -244,7 +211,7 @@ internal fun HomeDialSettingsSheet(
                                     if (onTogglePin != null) {
                                         androidx.compose.material3.IconButton(onClick = { onTogglePin(item) }) {
                                             Icon(
-                                                Icons.Outlined.PushPin,
+                                                MeloIcons.PushPin,
                                                 contentDescription = stringResource(
                                                     if (item.id in pinnedIds) R.string.pin_remove else R.string.pin_add,
                                                 ),
@@ -254,7 +221,7 @@ internal fun HomeDialSettingsSheet(
                                         }
                                     }
                                     androidx.compose.material3.IconButton(onClick = {}, modifier = Modifier.draggableHandle()) {
-                                        Icon(Icons.Rounded.DragHandle, stringResource(R.string.reorder))
+                                        Icon(MeloIcons.DragHandle, stringResource(R.string.reorder))
                                     }
                                 }
                             }
@@ -270,6 +237,6 @@ internal fun HomeDialSettingsSheet(
 private fun DialSwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        MeloSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
