@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_home">Accueil</string>
+    <string name="auto_library">Bibliothèque</string>
+    <string name="auto_downloaded">Téléchargé</string>
+    <string name="auto_shuffle">Lecture aléatoire</string>
+    <string name="auto_your_playlists">Vos playlists</string>
     <string name="auto_recent">Écoutés récemment</string>
     <string name="auto_playlists">Playlists</string>
     <string name="auto_local">Sur cet appareil</string>

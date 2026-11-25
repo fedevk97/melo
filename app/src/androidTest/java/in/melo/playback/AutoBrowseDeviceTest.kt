@@ -63,17 +63,17 @@ class AutoBrowseDeviceTest {
         return result ?: error("Android Auto would get an error for $parent")
     }
 
-    @Test fun rootListsTheThreeFolders() {
+    @Test fun rootListsTheThreeTabs() {
         val root = browser!!.root
         val folders = children(root)
-        assertEquals(listOf("Recently played", "Playlists", "On this device"), folders.map { it.description.title.toString() })
+        assertEquals(listOf("Home", "Library", "Downloaded"), folders.map { it.description.title.toString() })
         assertTrue(folders.all { it.isBrowsable })
     }
 
     @Test fun playlistsListTheDevicePlaylistAndItsTracks() {
         val playlists = children("auto:playlists")
         val ours = playlists.single { it.description.title == "Auto test playlist" }
-        val tracks = children(ours.mediaId!!)
+        val tracks = children(ours.mediaId!!).drop(1) // the first row is "Shuffle play"
         assertEquals(listOf("First song", "Second song"), tracks.map { it.description.title.toString() })
         assertTrue(tracks.all { it.isPlayable })
     }

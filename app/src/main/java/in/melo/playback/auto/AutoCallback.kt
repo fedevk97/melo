@@ -46,6 +46,21 @@ internal class AutoCallback(context: Context, private val scope: CoroutineScope)
         LibraryResult.ofItemList(ImmutableList.copyOf(library.children(parentId, page, pageSize)), params)
     }
 
+    /** The Android Auto search button: tells the car how many results there are, then lists them. */
+    override fun onSearch(
+        session: MediaLibraryService.MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String, params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<Void>> = future {
+        session.notifySearchResultChanged(browser, query, library.search(query).size, params)
+        LibraryResult.ofVoid()
+    }
+
+    override fun onGetSearchResult(
+        session: MediaLibraryService.MediaLibrarySession, browser: MediaSession.ControllerInfo,
+        query: String, page: Int, pageSize: Int, params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = future {
+        LibraryResult.ofItemList(ImmutableList.copyOf(library.searchResults(query).autoPage(page, pageSize)), params)
+    }
+
     /** A track chosen in Android Auto becomes the queue of the list it was in; everything else is queued as sent. */
     override fun onSetMediaItems(
         mediaSession: MediaSession, controller: MediaSession.ControllerInfo,

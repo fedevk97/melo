@@ -6,6 +6,8 @@ import `in`.melo.playback.auto.AutoIds
 import `in`.melo.playback.auto.AutoLimits
 import `in`.melo.playback.auto.autoPage
 import `in`.melo.playback.auto.distinctTracks
+import `in`.melo.playback.auto.matchesAutoSearch
+import `in`.melo.playback.auto.shuffledAutoQueue
 import `in`.melo.playback.auto.resolveAutoQueue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -70,5 +72,36 @@ class AutoBrowseTest {
     @Test fun repeatedPlaysAreListedOnceAtTheNewest() {
         val history = listOf(track(2), track(1), track(2), track(3))
         assertEquals(listOf(track(2), track(1), track(3)), history.distinctTracks())
+    }
+}
+
+class AutoBrowseExtrasTest {
+    private fun track(n: Int, title: String = "Song $n", artist: String = "Artist") =
+        Music("spotify:track:$n", title, artist, MusicKind.Track)
+
+    @Test fun shuffleKeepsEveryPlayableTrackOnceAndSkipsTheRest() {
+        val album = Music("spotify:album:1", "Album", "", MusicKind.Album)
+        val list = listOf(album) + (1..20).map { track(it) }
+        val shuffled = shuffledAutoQueue(list, java.util.Random(7))
+        assertEquals((1..20).map { track(it) }.toSet(), shuffled.toSet())
+        assertEquals(20, shuffled.size)
+    }
+
+    @Test fun shuffleRowAndSearchFoldersHaveTheirOwnIds() {
+        assertEquals(AutoIds.RECENT to AutoIds.SHUFFLE, AutoIds.parseTrack(AutoIds.track(AutoIds.RECENT, AutoIds.SHUFFLE)))
+        assertEquals("blue eyes", AutoIds.searchQueryOf(AutoIds.search("blue eyes")))
+        assertNull(AutoIds.searchQueryOf(AutoIds.LOCAL))
+        assertNull(AutoIds.searchQueryOf(AutoIds.search(" ")))
+    }
+
+    @Test fun searchNeedsEveryWordInTitleArtistOrAlbum() {
+        val song = track(1, title = "Blue Eyes", artist = "Elton John")
+        assertEquals(true, matchesAutoSearch(song, "elton blue"))
+        assertEquals(false, matchesAutoSearch(song, "elton red"))
+        assertEquals(false, matchesAutoSearch(song, "  "))
+    }
+
+    @Test fun threeTabsAreOffered() {
+        assertEquals(listOf(AutoIds.HOME, AutoIds.LIBRARY, AutoIds.DOWNLOADED), AutoIds.tabs)
     }
 }

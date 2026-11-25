@@ -13,10 +13,21 @@ internal object AutoIds {
     const val RECENT = "auto:recent"
     const val PLAYLISTS = "auto:playlists"
     const val LOCAL = "auto:local"
+    const val HOME = "auto:home"
+    const val LIBRARY = "auto:library"
+    const val DOWNLOADED = "auto:downloaded"
+    /** Stands for "play this folder in random order"; never a real track id. */
+    const val SHUFFLE = "__shuffle__"
+    private const val SEARCH = "auto:search:"
     private const val PLAYLIST = "auto:playlist:"
     private const val SEPARATOR = '|'
 
-    val folders = listOf(RECENT, PLAYLISTS, LOCAL)
+    /** The tabs Android Auto shows along the top, as in Spotify: Home, Library and Downloaded. */
+    val tabs = listOf(HOME, LIBRARY, DOWNLOADED)
+    val libraryFolders = listOf(PLAYLISTS, RECENT, LOCAL)
+
+    fun search(query: String) = SEARCH + query
+    fun searchQueryOf(folder: String): String? = folder.removePrefix(SEARCH).takeIf { folder.startsWith(SEARCH) && it.isNotBlank() }
 
     fun playlist(id: String) = PLAYLIST + id
     fun playlistIdOf(folder: String): String? = folder.removePrefix(PLAYLIST).takeIf { folder.startsWith(PLAYLIST) && it.isNotEmpty() }
@@ -59,3 +70,15 @@ internal fun resolveAutoQueue(siblings: List<Music>, trackId: String): Pair<List
 
 /** Several plays of the same track in a history list are shown once, at the newest play. */
 internal fun List<Music>.distinctTracks(): List<Music> = distinctBy(Music::id)
+
+/** The tracks of [siblings] in random order, for the "Shuffle" row at the top of a list. */
+internal fun shuffledAutoQueue(siblings: List<Music>, random: java.util.Random = java.util.Random()): List<Music> =
+    siblings.filter(Music::isPlayableTrack).shuffled(random).take(AutoLimits.QUEUE_AHEAD)
+
+/** Whether [track] answers a search: every word typed appears in its title, artist or album. */
+internal fun matchesAutoSearch(track: Music, query: String): Boolean {
+    val words = query.lowercase().split(' ').filter { it.isNotBlank() }
+    if (words.isEmpty()) return false
+    val haystack = "${track.title} ${track.subtitle} ${track.album}".lowercase()
+    return words.all { it in haystack }
+}
