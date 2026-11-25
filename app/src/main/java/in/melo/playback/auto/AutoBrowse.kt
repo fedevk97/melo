@@ -10,13 +10,18 @@ import `in`.melo.playback.isPlayableTrack
  */
 internal object AutoIds {
     const val ROOT = "auto:root"
+    const val HOME = "auto:home"
     const val RECENT = "auto:recent"
+    const val LIBRARY = "auto:library"
     const val PLAYLISTS = "auto:playlists"
+    const val PINNED = "auto:pinned"
     const val LOCAL = "auto:local"
+    const val SEARCH = "auto:search"
     private const val PLAYLIST = "auto:playlist:"
     private const val SEPARATOR = '|'
 
-    val folders = listOf(RECENT, PLAYLISTS, LOCAL)
+    /** The four tabs Android Auto shows, in order. */
+    val folders = listOf(HOME, RECENT, LIBRARY, LOCAL)
 
     fun playlist(id: String) = PLAYLIST + id
     fun playlistIdOf(folder: String): String? = folder.removePrefix(PLAYLIST).takeIf { folder.startsWith(PLAYLIST) && it.isNotEmpty() }
@@ -59,3 +64,22 @@ internal fun resolveAutoQueue(siblings: List<Music>, trackId: String): Pair<List
 
 /** Several plays of the same track in a history list are shown once, at the newest play. */
 internal fun List<Music>.distinctTracks(): List<Music> = distinctBy(Music::id)
+
+/** The content-style hints Android Auto reads from a browsable item's extras (values from androidx.media.utils.MediaConstants). */
+internal object AutoStyle {
+    const val SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
+    const val BROWSABLE = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
+    const val PLAYABLE = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
+    const val GROUP_TITLE = "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT"
+    const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
+    const val LIST = 1
+    const val GRID = 2
+}
+
+/** Tracks whose title, artist or album contain [query], ignoring case; blank queries match nothing. */
+internal fun List<Music>.matching(query: String): List<Music> {
+    val needle = query.trim()
+    if (needle.isEmpty()) return emptyList()
+    return filter { it.title.contains(needle, ignoreCase = true) || it.subtitle.contains(needle, ignoreCase = true) ||
+        it.album.contains(needle, ignoreCase = true) }
+}

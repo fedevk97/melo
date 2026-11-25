@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Android Auto
+
+- Home, Recents, Library and On this device tabs, with a cover grid on Home, search, and the Speed Dial.
+
 ## Melo 1.2.3
 
 ### Fixes

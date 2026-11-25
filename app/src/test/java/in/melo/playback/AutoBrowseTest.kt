@@ -6,6 +6,7 @@ import `in`.melo.playback.auto.AutoIds
 import `in`.melo.playback.auto.AutoLimits
 import `in`.melo.playback.auto.autoPage
 import `in`.melo.playback.auto.distinctTracks
+import `in`.melo.playback.auto.matching
 import `in`.melo.playback.auto.resolveAutoQueue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -70,5 +71,25 @@ class AutoBrowseTest {
     @Test fun repeatedPlaysAreListedOnceAtTheNewest() {
         val history = listOf(track(2), track(1), track(2), track(3))
         assertEquals(listOf(track(2), track(1), track(3)), history.distinctTracks())
+    }
+
+    @Test fun fourTabsInSpotifyOrder() {
+        assertEquals(listOf(AutoIds.HOME, AutoIds.RECENT, AutoIds.LIBRARY, AutoIds.LOCAL), AutoIds.folders)
+    }
+
+    @Test fun searchMatchesTitleArtistAndAlbumIgnoringCase() {
+        val list = listOf(
+            Music("spotify:track:1", "Leave In Five", "The Maine", MusicKind.Track),
+            Music("spotify:track:2", "Other", "Someone", MusicKind.Track, album = "Five Roses"),
+            Music("spotify:track:3", "Nothing", "Nobody", MusicKind.Track),
+        )
+        assertEquals(listOf("spotify:track:1", "spotify:track:2"), list.matching("five").map { it.id })
+        assertEquals(listOf("spotify:track:1"), list.matching(" maine ").map { it.id })
+        assertEquals(emptyList<Music>(), list.matching("  "))
+    }
+
+    @Test fun searchResultsAreTrackNodesOfTheSearchFolder() {
+        val node = AutoIds.track(AutoIds.SEARCH, "spotify:track:1")
+        assertEquals(AutoIds.SEARCH to "spotify:track:1", AutoIds.parseTrack(node))
     }
 }

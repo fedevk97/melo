@@ -31,7 +31,7 @@ internal class AutoCallback(context: Context, private val scope: CoroutineScope)
 
     override fun onGetLibraryRoot(
         session: MediaLibraryService.MediaLibrarySession, browser: MediaSession.ControllerInfo, params: LibraryParams?,
-    ): ListenableFuture<LibraryResult<MediaItem>> = completed(LibraryResult.ofItem(library.root(), params))
+    ): ListenableFuture<LibraryResult<MediaItem>> = completed(LibraryResult.ofItem(library.root(), library.rootParams()))
 
     override fun onGetItem(
         session: MediaLibraryService.MediaLibrarySession, browser: MediaSession.ControllerInfo, mediaId: String,
@@ -44,6 +44,20 @@ internal class AutoCallback(context: Context, private val scope: CoroutineScope)
         parentId: String, page: Int, pageSize: Int, params: LibraryParams?,
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = future {
         LibraryResult.ofItemList(ImmutableList.copyOf(library.children(parentId, page, pageSize)), params)
+    }
+
+    override fun onSearch(
+        session: MediaLibraryService.MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String, params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<Void>> = future {
+        session.notifySearchResultChanged(browser, query, library.search(query).size, params)
+        LibraryResult.ofVoid()
+    }
+
+    override fun onGetSearchResult(
+        session: MediaLibraryService.MediaLibrarySession, browser: MediaSession.ControllerInfo,
+        query: String, page: Int, pageSize: Int, params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = future {
+        LibraryResult.ofItemList(ImmutableList.copyOf(library.searchResults(query, page, pageSize)), params)
     }
 
     /** A track chosen in Android Auto becomes the queue of the list it was in; everything else is queued as sent. */
@@ -63,7 +77,8 @@ internal class AutoCallback(context: Context, private val scope: CoroutineScope)
     /** Items named by an Android Auto node become playable; items the app built itself pass through. */
     private suspend fun resolveAll(items: List<MediaItem>): List<MediaItem> = items.mapNotNull { item ->
         val (parent, trackId) = AutoIds.parseTrack(item.mediaId) ?: return@mapNotNull item
-        library.tracks(parent).firstOrNull { it.id == trackId }?.let { mediaItem(it) }
+        val pool = if (parent == AutoIds.SEARCH) library.searchPool() else library.tracks(parent)
+        pool.firstOrNull { it.id == trackId }?.let { mediaItem(it) }
     }
 
     private fun <T> completed(value: T): ListenableFuture<T> = SettableFuture.create<T>().also { it.set(value) }

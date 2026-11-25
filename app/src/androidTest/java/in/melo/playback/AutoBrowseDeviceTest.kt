@@ -66,7 +66,7 @@ class AutoBrowseDeviceTest {
     @Test fun rootListsTheThreeFolders() {
         val root = browser!!.root
         val folders = children(root)
-        assertEquals(listOf("Recently played", "Playlists", "On this device"), folders.map { it.description.title.toString() })
+        assertEquals(listOf("Home", "Recently played", "Library", "On this device"), folders.map { it.description.title.toString() })
         assertTrue(folders.all { it.isBrowsable })
     }
 
