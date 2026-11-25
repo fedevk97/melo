@@ -1,16 +1,57 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.data.TourTarget
+import `in`.melo.presentation.components.onboarding.tourAnchor
+import `in`.melo.presentation.components.LocalAmbientAccent
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.ui.theme.MeloLayout
 import `in`.melo.presentation.navigation.navigateToTopLevelSafely
 
 import android.os.SystemClock
+import `in`.melo.ui.glass.FlatSelectionPill
+import `in`.melo.ui.glass.GlassPillMotion
+import `in`.melo.ui.glass.GlassSelectionPill
+import `in`.melo.ui.glass.LocalAppBackdrop
+import `in`.melo.ui.glass.LocalMeloSurface
+import `in`.melo.ui.glass.MeloSurfaceStyle
+import `in`.melo.ui.glass.PILL_GROW_HEIGHT
+import `in`.melo.ui.glass.fitInsideBar
+import `in`.melo.ui.glass.glassIndicatorColor
+import `in`.melo.ui.glass.meloGlass
+import `in`.melo.ui.glass.pillPlacement
+import `in`.melo.ui.glass.backdrop.backdrops.layerBackdrop
+import `in`.melo.ui.glass.backdrop.backdrops.rememberLayerBackdrop
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.roundToInt
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.LayoutDirection
+import `in`.melo.ui.theme.MeloMotion
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.ui.theme.label
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +69,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -125,11 +165,134 @@ private fun PlayerInternalNavigationItemsRow(
             .padding(start = MeloLayout.Space3, end = MeloLayout.Space3, bottom = innerRowPadding)
             .fillMaxWidth()
     }
-    Row(
-        modifier = rowModifier
+    // One shared pill sits behind the tabs and travels from the old tab to the new one. In the
+    // Glass style it lifts off the bar as a lens while it moves (see GlassSelectionPill) and
+    // lands flat; Frost and Solid carry the same motion with a flat pill.
+    val selectedIndex = navItems.indexOfFirst { currentRoute != null && it.screen.route == currentRoute }
+    val pillScope = rememberCoroutineScope()
+    val pill = remember { GlassPillMotion(pillScope, selectedIndex.coerceAtLeast(0)) }
+    val page = LocalAppBackdrop.current
+    val glassPill = page != null && LocalMeloSurface.current.style == MeloSurfaceStyle.GLASS
+    val barGlass = rememberLayerBackdrop()
+    val tabRow = rememberLayerBackdrop()
+    val pillColor = if (page != null) glassIndicatorColor() else MaterialTheme.colorScheme.controlFill
+    val itemCount = navItems.size.coerceAtLeast(1)
+    val density = LocalDensity.current
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val haptics = LocalHapticFeedback.current
+    var rowSize by remember { mutableStateOf(IntSize.Zero) }
+    val tabStepPx = if (rowSize.width > 0) rowSize.width.toFloat() / itemCount else 0f
+    pill.stepDp = tabStepPx / density.density
+    val insetPx = with(density) { TabPillInset.toPx() }
+    val rowHeightPx = rowSize.height.toFloat()
+    val restSize = Size(tabStepPx, rowHeightPx)
+    val barHeightPx = rowHeightPx + insetPx * 2
+    val liftedSize = when {
+        rowHeightPx <= 0f -> restSize
+        glassPill -> {
+            val lifted = barHeightPx + with(density) { PILL_GROW_HEIGHT.toPx() }
+            Size(lifted * tabStepPx / rowHeightPx, lifted)
+        }
+        else -> Size(tabStepPx + insetPx * 2, barHeightPx)
+    }
+    val pillCenter: (Float) -> Offset = { position ->
+        val x = position * tabStepPx + tabStepPx / 2f
+        Offset(if (isRtl) rowSize.width - x else x, rowHeightPx / 2f)
+    }
+    val flatPillSize: () -> Size = {
+        val live = pill.liveSize(restSize, liftedSize)
+        if (glassPill) live
+        else fitInsideBar(live, pillCenter(pill.position).x, -insetPx, rowSize.width + insetPx, barHeightPx)
+    }
+    val showPill = selectedIndex >= 0 && tabStepPx > 0f
+    var lastSelectedIndex by remember { mutableIntStateOf(selectedIndex) }
+    var lastTickTab by remember { mutableIntStateOf(selectedIndex) }
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex >= 0) {
+            if (lastSelectedIndex < 0) pill.snapTo(selectedIndex) else pill.animateTo(selectedIndex)
+        }
+        lastSelectedIndex = selectedIndex
+        lastTickTab = selectedIndex
+    }
+    val currentSelectedIndex by rememberUpdatedState(selectedIndex)
+    Box(rowModifier, contentAlignment = Alignment.Center) {
+    // Unclipped: the lifted lens stands past the bar's edges, so it is drawn over the bar.
+    Box(
+        Modifier
+            .then(
+                if (navBarStyle == NavBarStyle.FULL_WIDTH) Modifier
+                else Modifier.widthIn(max = MeloLayout.FloatingBarMaxWidth)
+            )
+            .fillMaxSize()
             .padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 1f), CircleShape)
-            .border(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = MeloAlpha.Secondary), CircleShape)
+    ) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(
+                if (page != null) Modifier.meloGlass(CircleShape, exportedBackdrop = if (glassPill) barGlass else null)
+                else Modifier.meloBarMaterial(CircleShape)
+            )
+            .clip(CircleShape)
+            .padding(TabPillInset)
+    ) {
+    if (showPill && (!glassPill || pill.isFlat)) {
+        FlatSelectionPill(
+            color = pillColor,
+            modifier = Modifier.matchParentSize().pillPlacement(center = { pillCenter(pill.position) }, size = flatPillSize),
+        )
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { rowSize = it }
+            .then(if (glassPill) Modifier.layerBackdrop(tabRow) else Modifier)
+            // Drag along the bar to carry the pill across tabs, ticking at each one.
+            .pointerInput(itemCount, tabStepPx, isRtl) {
+                if (tabStepPx <= 0f) return@pointerInput
+                val direction = if (isRtl) -1f else 1f
+                var totalDrag = 0f
+                var from = 0
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        from = currentSelectedIndex
+                        totalDrag = 0f
+                        if (from >= 0) pill.startDrag()
+                    },
+                    onDragCancel = { if (from >= 0) pill.release(from) },
+                    onDragEnd = {
+                        if (from >= 0) {
+                            val ratio = totalDrag / tabStepPx
+                            val shift = when {
+                                ratio > 0.35f -> maxOf(1, ratio.roundToInt())
+                                ratio < -0.35f -> minOf(-1, ratio.roundToInt())
+                                else -> 0
+                            }
+                            val next = (from + shift).coerceIn(0, navItems.lastIndex)
+                            pill.release(next)
+                            if (next != from && latestNavigationEnabled) {
+                                navController.navigateToTopLevelSafely(navItems[next].screen.route)
+                            }
+                        }
+                    },
+                    onHorizontalDrag = { _, delta ->
+                        if (from >= 0) {
+                            totalDrag += delta * direction
+                            val offset = when {
+                                totalDrag > 0 && from == navItems.lastIndex -> totalDrag * 0.25f
+                                totalDrag < 0 && from == 0 -> totalDrag * 0.25f
+                                else -> totalDrag
+                            }
+                            pill.dragTo(from + offset / tabStepPx)
+                            val near = (from + offset / tabStepPx).coerceIn(0f, navItems.lastIndex.toFloat()).roundToInt()
+                            if (near != lastTickTab) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                                lastTickTab = near
+                            }
+                        }
+                    },
+                )
+            }
             .selectableGroup(),
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically
@@ -138,9 +301,8 @@ private fun PlayerInternalNavigationItemsRow(
         var lastSearchTapTimestamp by remember { mutableStateOf(0L) }
         navItems.forEach { item ->
             val isSelected = currentRoute != null && currentRoute == item.screen.route
-            val selectedColor = MaterialTheme.colorScheme.primary
-            val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
-            val indicatorColorFromTheme = MaterialTheme.colorScheme.secondaryContainer
+            val selectedColor = pageAccent()
+            val unselectedColor = MaterialTheme.colorScheme.label
 
             val iconPainterResId = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
                 item.selectedIconResId
@@ -151,7 +313,7 @@ private fun PlayerInternalNavigationItemsRow(
             val iconLambda: @Composable () -> Unit = remember(iconPainterResId, localizedLabel) {
                 {
                     Icon(
-                        painter = painterResource(id = iconPainterResId),
+                        painter = meloPainter(id = iconPainterResId),
                         contentDescription = localizedLabel
                     )
                 }
@@ -159,7 +321,7 @@ private fun PlayerInternalNavigationItemsRow(
             val selectedIconLambda: @Composable () -> Unit = remember(iconPainterResId, localizedLabel) {
                 {
                     Icon(
-                        painter = painterResource(id = iconPainterResId),
+                        painter = meloPainter(id = iconPainterResId),
                         contentDescription = localizedLabel
                     )
                 }
@@ -207,14 +369,18 @@ private fun PlayerInternalNavigationItemsRow(
                         }
                     } else if (!isAlreadySelected) {
                         lastSearchTapTimestamp = 0L
+                        if (itemRoute == Screen.Home.route) `in`.melo.presentation.screens.HomeReselect.entered()
                         navController.navigateToTopLevelSafely(itemRoute)
                     } else {
                         lastSearchTapTimestamp = 0L
+                        if (itemRoute == Screen.Home.route) `in`.melo.presentation.screens.HomeReselect.request()
                     }
                 }
             }
             CustomNavigationBarItem(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).then(
+                    if (item.screen == Screen.Library) Modifier.tourAnchor(TourTarget.LIBRARY_TAB) else Modifier
+                ),
                 selected = isSelected,
                 onClick = onClickLambda,
                 enabled = currentRoute != null,
@@ -228,11 +394,28 @@ private fun PlayerInternalNavigationItemsRow(
                 unselectedIconColor = unselectedColor,
                 selectedTextColor = selectedColor,
                 unselectedTextColor = unselectedColor,
-                indicatorColor = indicatorColorFromTheme
             )
         }
     }
+    }
+    if (glassPill && showPill && !pill.isFlat) {
+        GlassSelectionPill(
+            motion = pill,
+            fillColor = pillColor,
+            barGlass = barGlass,
+            tabRow = tabRow,
+            modifier = Modifier.matchParentSize().pillPlacement(
+                center = { pillCenter(pill.position) + Offset(insetPx, insetPx) },
+                size = { pill.liveSize(restSize, liftedSize) },
+            ),
+        )
+    }
+    }
+    }
 }
+
+/** How far the selection pill sits in from the bar's own edge. */
+private val TabPillInset = 4.dp
 
 @Composable
 fun PlayerInternalNavigationBar(

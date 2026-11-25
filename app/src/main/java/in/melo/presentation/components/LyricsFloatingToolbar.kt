@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -9,11 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Lyrics
-import androidx.compose.material.icons.rounded.TextFormat
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,13 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import `in`.melo.R
 import `in`.melo.ui.theme.MeloLayout
 import `in`.melo.data.model.Lyrics
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwitchDefaults
@@ -107,7 +101,7 @@ fun LyricsFloatingToolbar(
             onClick = onNavigateBack
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                imageVector = MeloIcons.ArrowBack,
                 contentDescription = stringResource(R.string.common_back),
                 tint = onBackgroundColor
             )
@@ -162,7 +156,7 @@ fun LyricsFloatingToolbar(
             onClick = onMoreClick
         ) {
             Icon(
-                imageVector = Icons.Filled.MoreVert,
+                imageVector = MeloIcons.MoreVert,
                 contentDescription = stringResource(R.string.lyrics_options),
                 tint = onBackgroundColor
             )

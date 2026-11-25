@@ -15,19 +15,25 @@ internal object TtmlLyricsParser {
     fun parseToEnhancedLrc(ttmlText: String): String? {
         return runCatching {
             val normalizedTtml = normalizeTtmlDocument(ttmlText)
-            if (normalizedTtml.isBlank()) {
+            // Lyrics come from third parties: a document declaring a DTD or entities is refused outright,
+            // whatever the platform parser would have done with it.
+            if (normalizedTtml.isBlank() || normalizedTtml.contains("<!DOCTYPE", ignoreCase = true) ||
+                normalizedTtml.contains("<!ENTITY", ignoreCase = true)
+            ) {
                 return null
             }
 
             val builder = DocumentBuilderFactory.newInstance().apply {
                 isNamespaceAware = true
-                isXIncludeAware = false
+                // Android's parser rejects most of these features (it reads no DTD and expands no external
+                // entity in the first place), and one refusal must not abandon the whole document.
+                runCatching { isXIncludeAware = false }
                 setExpandEntityReferences(false)
-                setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-                setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-                setFeature("http://xml.org/sax/features/external-general-entities", false)
-                setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-                setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+                runCatching { setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true) }
+                runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+                runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+                runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+                runCatching { setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false) }
                 runCatching { setAttribute("http://javax.xml.XMLConstants/property/accessExternalDTD", "") }
                 runCatching { setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "") }
             }.newDocumentBuilder().apply {

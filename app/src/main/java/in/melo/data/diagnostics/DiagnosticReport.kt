@@ -41,7 +41,7 @@ internal suspend fun buildDiagnosticReport(context: Context, librarySizes: Strin
     val vpn = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
     return buildString {
         appendLine("Melo diagnostic report")
-        appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${BuildConfig.BUILD_TYPE}, native engine=${BuildConfig.NATIVE_RUNTIME}")
+        appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${BuildConfig.BUILD_TYPE}")
         appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), device: ${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("Locale: ${java.util.Locale.getDefault().toLanguageTag()}, network: $transport, vpn=$vpn, metered=${network?.isActiveNetworkMetered}, online=${NetworkMonitor.online.value}")
         appendLine("Spotify account: ${if (session == null) "not signed in" else "signed in"}")

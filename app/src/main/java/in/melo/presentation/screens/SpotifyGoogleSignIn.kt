@@ -1,5 +1,6 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.MeloIcons
 import android.annotation.SuppressLint
 import android.net.Uri
 import android.webkit.CookieManager
@@ -11,8 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -109,9 +108,14 @@ internal fun SpotifyGoogleSignIn(onSigned: (code: String?, idToken: String?) -> 
         modifier = Modifier.safeDrawingPadding(),
         topBar = {
             TopAppBar(
+                // Same black as the page, also once content scrolls under it.
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
                 title = { Text(stringResource(R.string.spotify_google_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_cancel)) }
+                    IconButton(onClick = onClose) { Icon(MeloIcons.ArrowBack, stringResource(R.string.action_cancel)) }
                 },
             )
         },
@@ -128,7 +132,16 @@ internal fun SpotifyGoogleSignIn(onSigned: (code: String?, idToken: String?) -> 
                         settings.userAgentString = settings.userAgentString.replace("; wv", "")
                             .replace(Regex("""Version/\S+\s"""), "")
                         CookieManager.getInstance().setAcceptCookie(true)
+                        // Shown once the first page has painted: until then a WebView is a blank
+                        // white sheet, which flashes against the dark page behind it.
+                        visibility = android.view.View.INVISIBLE
+                        // An unstyled first frame then shows the page behind it, not white.
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         webViewClient = object : WebViewClient() {
+                            override fun onPageCommitVisible(view: WebView, url: String?) {
+                                if (view.visibility == android.view.View.INVISIBLE) view.visibility = android.view.View.VISIBLE
+                            }
+
                             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                 val redirect = googleRedirect(request.url.toString()) ?: return false
                                 finish(redirect)

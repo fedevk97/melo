@@ -1,5 +1,9 @@
 package `in`.melo.presentation.components.subcomps
 
+import `in`.melo.ui.glass.pressSink
+import `in`.melo.ui.glass.rememberPressDent
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -29,20 +33,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.Sort
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.MyLocation
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.FilterList
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.Dataset
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -71,7 +61,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -142,11 +131,13 @@ fun LibraryActionRow(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Determine button colors based on shuffle state (not for playlist tab)
-                    val buttonContainerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    val buttonContentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    val buttonContainerColor = MaterialTheme.colorScheme.primary
+                    val buttonContentColor = MaterialTheme.colorScheme.onPrimary
                     
+                    val dent = rememberPressDent()
                     FilledTonalButton(
                         onClick = onMainActionClick,
+                        interactionSource = dent.interactions,
                         shape = RoundedCornerShape(
                             topStart = 26.dp, bottomStart = 26.dp,
                             topEnd =  newButtonEndCorner, bottomEnd = newButtonEndCorner
@@ -155,11 +146,11 @@ fun LibraryActionRow(
                             containerColor = buttonContainerColor,
                             contentColor = buttonContentColor
                         ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 6.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = MeloLayout.Space3),
-                        modifier = Modifier.height(genHeight)
+                        modifier = Modifier.height(genHeight).pressSink(dent)
                     ) {
-                        val icon = if (isPlaylistTab) Icons.AutoMirrored.Rounded.PlaylistAdd else Icons.Rounded.Shuffle
+                        val icon = if (isPlaylistTab) MeloIcons.PlaylistAdd else MeloIcons.Shuffle
                         val text = if (isPlaylistTab) {
                             stringResource(R.string.library_action_new)
                         } else {
@@ -220,13 +211,10 @@ fun LibraryActionRow(
                                     topEnd = 26.dp,
                                     bottomEnd = 26.dp
                                 ),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
+                                colors = `in`.melo.presentation.components.meloTonalButtonColors(),
                                 elevation = ButtonDefaults.buttonElevation(
-                                    defaultElevation = 4.dp,
-                                    pressedElevation = 6.dp
+                                    defaultElevation = 0.dp,
+                                    pressedElevation = 0.dp
                                 ),
                                 contentPadding = PaddingValues(
                                     horizontal = MeloLayout.Space4,
@@ -239,7 +227,7 @@ fun LibraryActionRow(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(
-                                        painter = painterResource(R.drawable.rounded_upload_file_24),
+                                        painter = meloPainter(R.drawable.rounded_upload_file_24),
                                         contentDescription = stringResource(R.string.library_cd_import_m3u_playlist),
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -301,11 +289,12 @@ fun LibraryActionRow(
                 if (showSearchButton) {
                     FilledTonalIconButton(
                         onClick = onSearchClick,
+                        colors = `in`.melo.presentation.components.meloTonalIconColors(),
                         shape = CircleShape,
                         modifier = Modifier.size(genHeight)
                     ) {
                         Icon(
-                            imageVector = if (isSearchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
+                            imageVector = if (isSearchOpen) MeloIcons.Close else MeloIcons.Search,
                             contentDescription = stringResource(if (isSearchOpen) R.string.library_search_close else R.string.library_search_open),
                         )
                     }
@@ -319,6 +308,7 @@ fun LibraryActionRow(
                 ) {
                     FilledTonalIconButton(
                         onClick = onLocateClick,
+                        colors = `in`.melo.presentation.components.meloTonalIconColors(),
                         shape = RoundedCornerShape(
                             topStart = outerCorner,
                             bottomStart = outerCorner,
@@ -328,7 +318,7 @@ fun LibraryActionRow(
                         modifier = Modifier.size(genHeight)
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.MyLocation,
+                            imageVector = MeloIcons.MyLocation,
                             contentDescription = stringResource(R.string.library_cd_locate_current_song)
                         )
                     }
@@ -338,9 +328,10 @@ fun LibraryActionRow(
 
                 Spacer(modifier = Modifier.width(gapBetweenFilterAndSort))
 
-                // Sort Button
-                FilledTonalIconButton(
+                // Sort Button: only where the tab has something to sort by.
+                if (showSortButton) FilledTonalIconButton(
                     onClick = onSortClick,
+                    colors = `in`.melo.presentation.components.meloTonalIconColors(),
                     shape = RoundedCornerShape(
                         topStart = sortStartCorner,
                         bottomStart = sortStartCorner,
@@ -350,7 +341,7 @@ fun LibraryActionRow(
                     modifier = Modifier.size(genHeight)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.Sort,
+                        imageVector = MeloIcons.Sort,
                         contentDescription = stringResource(R.string.library_cd_sort_options),
                     )
                 }

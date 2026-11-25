@@ -1,15 +1,12 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.DownloadForOffline
-import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -63,28 +60,28 @@ internal fun DetailActionBar(page: DetailPage, actions: List<ActionSpec>, ui: Pl
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         bar.forEach { spec ->
-            MeloIconButton(
+            // Plain buttons are glass, like the play row above them; on, or destructive, keeps its colour.
+            if (!spec.selected && !spec.destructive) GlassCircleButton(
+                icon = spec.icon,
+                contentDescription = spec.label,
+                onClick = spec.onClick,
+                size = MeloLayout.ControlSize,
+                enabled = spec.enabled,
+            ) else MeloIconButton(
                 icon = spec.icon,
                 contentDescription = spec.label,
                 onClick = spec.onClick,
                 enabled = spec.enabled,
-                containerColor = when {
-                    spec.selected -> MaterialTheme.colorScheme.primary
-                    spec.destructive -> MaterialTheme.colorScheme.errorContainer
-                    else -> MaterialTheme.colorScheme.surfaceContainer
-                },
-                contentColor = when {
-                    spec.selected -> MaterialTheme.colorScheme.onPrimary
-                    spec.destructive -> MaterialTheme.colorScheme.onErrorContainer
-                    else -> MaterialTheme.colorScheme.onSurface
-                },
+                containerColor = if (spec.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.errorContainer,
+                contentColor = if (spec.selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onErrorContainer,
             )
         }
         if (menu.isNotEmpty()) Box {
-            MeloIconButton(
-                icon = Icons.Rounded.MoreVert,
+            GlassCircleButton(
+                icon = MeloIcons.MoreVert,
                 contentDescription = stringResource(R.string.detail_more_actions),
                 onClick = { expanded = true },
+                size = MeloLayout.ControlSize,
             )
             MeloMenu(expanded = expanded, onDismiss = { expanded = false }) {
                 menu.forEach { spec ->
@@ -111,7 +108,7 @@ internal fun downloadAction(ui: PlayerViewModel, item: `in`.melo.data.Music): Ac
     val requested = progress != null || item.id in preparations
     return ActionSpec(
         DetailAction.DOWNLOAD,
-        if (complete) Icons.Rounded.DownloadForOffline else Icons.Outlined.DownloadForOffline,
+        if (complete) MeloIcons.Downloaded else MeloIcons.DownloadForOffline,
         stringResource(if (complete) R.string.download_remove else if (requested) R.string.download_cancel else R.string.download_action),
         onClick = { ui.toggleDownloadItem(item) }, selected = complete,
     )

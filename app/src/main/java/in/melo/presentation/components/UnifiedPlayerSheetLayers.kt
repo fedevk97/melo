@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
@@ -77,6 +78,7 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
             CompositionLocalProvider(
                 LocalMaterialTheme provides readyScheme
             ) {
+                val progressColor = progressTint(pageAccent())
                 val miniPlayerZIndex by remember {
                     derivedStateOf {
                         if (playerContentExpansionFraction.value < 0.5f) 1f else 0f
@@ -90,7 +92,8 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                         .graphicsLayer {
                             // Compute miniAlpha in the draw phase from the Animatable,
                             // avoiding per-frame recomposition during gestures.
-                            alpha = (1f - playerContentExpansionFraction.value * 2f)
+                            // Gone by 20 % open.
+                            alpha = (1f - playerContentExpansionFraction.value / 0.2f)
                                 .coerceIn(0f, 1f)
                         }
                         .layout { measurable, constraints ->
@@ -115,12 +118,22 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                             }
                         }
                         .zIndex(miniPlayerZIndex)
+                        // A thin line along the bottom in the song's colour, brightening
+                        // towards the playhead. The card around it clips it to its rounded shape.
+                        .miniPlayerProgress(
+                            positionMs = currentPositionProvider,
+                            durationMs = { infrequentPlayerState.totalDuration },
+                            color = progressColor,
+                            glow = false,
+                        )
                 ) {
                     val isMiniPlayerVisible by remember {
                         derivedStateOf { playerContentExpansionFraction.value < 0.01f }
                     }
+                    val miniSettings by playerViewModel.settings.collectAsStateWithLifecycle()
                     MiniPlayerContentInternal(
                         song = currentSongNonNull,
+                        coverMix = miniSettings.albumCoverMix,
                         isPlaying = infrequentPlayerState.isPlaying,
                         isBuffering = infrequentPlayerState.isBuffering,
                         isCastConnecting = isCastConnecting,
@@ -138,7 +151,8 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
         if (shouldRenderFullPlayer) {
             val settings by playerViewModel.settings.collectAsStateWithLifecycle()
             CompositionLocalProvider(
-                LocalMaterialTheme provides if (settings.playerArtworkGradient) DarkColorScheme else albumColorScheme
+                LocalMaterialTheme provides if (settings.playerArtworkGradient) DarkColorScheme else albumColorScheme,
+            `in`.melo.presentation.components.player.LocalPlayerArtAccent provides albumColorScheme.primary,
             ) {
                 val fullPlayerScale by remember(bottomSheetOpenFraction) {
                     // Keep the depth effect, but avoid aggressive full-screen rescaling on every frame.
@@ -222,6 +236,10 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                     val onRepeatToggle = remember(playerViewModel) { playerViewModel::cycleRepeatMode }
                     val onFavoriteToggle = remember(playerViewModel) { playerViewModel::toggleFavorite }
 
+                    CompositionLocalProvider(
+                        `in`.melo.presentation.components.scoped.LocalFullPlayerSlide provides fullPlayerVisualState::translationY::get,
+                        `in`.melo.presentation.components.player.LocalMiniCoverStartPx provides currentHorizontalPaddingStartPxProvider
+                    ) {
                     FullPlayerContent(
                         currentSong = currentSongNonNull,
                         currentPlaybackQueue = currentPlaybackQueue,
@@ -260,6 +278,7 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                         onRepeatToggle = onRepeatToggle,
                         onFavoriteToggle = onFavoriteToggle
                     )
+                    }
                 }
             }
         }
@@ -294,7 +313,8 @@ internal fun UnifiedPlayerPrewarmLayer(
         val currentPlaybackQueue by playerViewModel.queueFlow
             .collectAsStateWithLifecycle()
         CompositionLocalProvider(
-            LocalMaterialTheme provides if (settings.playerArtworkGradient) DarkColorScheme else albumColorScheme
+            LocalMaterialTheme provides if (settings.playerArtworkGradient) DarkColorScheme else albumColorScheme,
+            `in`.melo.presentation.components.player.LocalPlayerArtAccent provides albumColorScheme.primary,
         ) {
             Box(
                 modifier = Modifier

@@ -1,5 +1,9 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.ui.theme.selectedFill
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,9 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -54,8 +55,8 @@ import `in`.melo.ui.theme.MeloLayout
 fun LocalBadge(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        color = MaterialTheme.colorScheme.controlFill,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = MeloLayout.ArtworkShape,
     ) {
         Text(
@@ -70,7 +71,7 @@ fun LocalBadge(modifier: Modifier = Modifier) {
 @Composable
 fun PlaylistNameDialog(title: String, initial: String = "", onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var name by remember { mutableStateOf(initial) }
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -121,7 +122,7 @@ fun AddToLocalPlaylistSheet(item: Music, ui: PlayerViewModel, onDismiss: () -> U
     val youTubeItem = item.id.startsWith("ytm:")
     val youTubePlaylists = if (!youTubeItem) emptyList() else youTubeAll.filter { it.id != item.id && (it.id in youTubeEditable || ui.model.youTubePlaylistOwned(it)) }
     var creating by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    `in`.melo.presentation.components.MeloBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).navigationBarsPadding()) {
             Text(
                 stringResource(R.string.playlist_add_to),
@@ -135,7 +136,7 @@ fun AddToLocalPlaylistSheet(item: Music, ui: PlayerViewModel, onDismiss: () -> U
                         Modifier.fillMaxWidth().clip(MeloLayout.PanelShape).clickable { creating = true }.padding(MeloLayout.Space3),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(44.dp).padding(8.dp))
+                        Icon(MeloIcons.Add, null, Modifier.size(44.dp).padding(8.dp))
                         Text(stringResource(R.string.spotify_playlist_new), Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
                     }
                 }

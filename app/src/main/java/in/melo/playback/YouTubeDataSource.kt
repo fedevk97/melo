@@ -26,7 +26,7 @@ import java.io.IOException
 
 /**
  * Addresses of tracks read from YouTube Music: `ytm://track/<videoId>` for a YouTube Music track,
- * `ytm://match/<id>?…` for a Spotify track played without a Spotify account, found by [TrackMatcher].
+ * `ytm://match/<id>?…` for a Spotify track, matched on YouTube Music by [TrackMatcher].
  */
 internal object YouTubeUris {
     const val SCHEME = "ytm"
@@ -34,9 +34,9 @@ internal object YouTubeUris {
     fun isYouTube(uri: Uri?): Boolean = uri?.scheme == SCHEME
 
     /** The address that plays [track] from YouTube Music, or null when it plays another way. */
-    fun of(track: Music, spotifySignedIn: Boolean): Uri? {
+    fun of(track: Music): Uri? {
         track.youTubeVideoId?.let { return Uri.parse("$SCHEME://track/$it") }
-        if (spotifySignedIn || track.isLocalTrack || !track.id.startsWith("spotify:track:")) return null
+        if (track.isLocalTrack || !track.id.startsWith("spotify:track:")) return null
         return Uri.Builder().scheme(SCHEME).authority("match").appendPath(track.id)
             .appendQueryParameter("title", track.title).appendQueryParameter("artists", track.subtitle)
             .appendQueryParameter("duration", track.durationMs.toString()).appendQueryParameter("album", track.album)
@@ -49,6 +49,29 @@ internal object YouTubeUris {
 
     @androidx.annotation.OptIn(UnstableApi::class)
     fun cacheKey(trackId: String): String = AudioCache.key(fileHex(trackId))
+
+    /**
+     * A capped stream is a different file from the full one, so it is cached under a name of its
+     * own and never stands in for the full copy.
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    fun cacheKey(trackId: String, ceiling: Long?): String =
+        if (ceiling == null) cacheKey(trackId) else AudioCache.key(fileHex(trackId) + "-" + ceiling / 1000 + "k")
+
+    private const val CEILING = "cap"
+
+    /** [uri] asking for a stream of at most [ceiling] bit/s, or for the best one when null. */
+    fun withCeiling(uri: Uri, ceiling: Long?): Uri {
+        val builder = uri.buildUpon().clearQuery()
+        uri.queryParameterNames.filter { it != CEILING }.forEach { name ->
+            uri.getQueryParameters(name).forEach { builder.appendQueryParameter(name, it) }
+        }
+        if (ceiling != null) builder.appendQueryParameter(CEILING, ceiling.toString())
+        return builder.build()
+    }
+
+    /** The highest bitrate [uri] may be read at, or null for the best stream. */
+    fun ceiling(uri: Uri): Long? = uri.getQueryParameter(CEILING)?.toLongOrNull()
 
     /** The track id an address plays, as the queue and the indexes know it. */
     fun trackId(uri: Uri): String? = when (uri.authority) {
@@ -100,12 +123,13 @@ internal class YouTubeDataSource private constructor(private val context: Contex
             else -> YouTubeUris.matchQuery(uri)?.let(TrackMatcher::resolve)
                 ?: throw YouTubeFailure("This track was not found on YouTube Music.", "NO_MATCH")
         }
+        val ceiling = YouTubeUris.ceiling(uri)
         position = dataSpec.position
         requestEnd = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.position + dataSpec.length else UNSET
         val excluded = HashSet<String>()
         var failure: IOException? = null
         repeat(MAX_ATTEMPTS) { attempt ->
-            val current = YouTubeMusic.stream(videoId, excluded)
+            val current = YouTubeMusic.stream(videoId, excluded, ceiling)
             stream = current
             resourceEnd = if (current.contentLength > 0) current.contentLength else UNSET
             if (resourceEnd != UNSET && position > resourceEnd) {
@@ -114,7 +138,8 @@ internal class YouTubeDataSource private constructor(private val context: Contex
             try {
                 delegate = OkHttpDataSource.Factory(YouTubeMusic.http).setUserAgent(current.userAgent).createDataSource()
                 openNextRange()
-                if (resourceEnd != UNSET) AudioIndex.get(context).attachDirectFile(trackId, AudioFileRecord(YouTubeUris.fileHex(trackId), resourceEnd, ""))
+                // Only the full stream is the track's file; a capped one stays out of the index.
+                if (resourceEnd != UNSET && ceiling == null) AudioIndex.get(context).attachDirectFile(trackId, AudioFileRecord(YouTubeUris.fileHex(trackId), resourceEnd, ""))
                 opened = true
                 transferStarted(dataSpec)
                 val end = knownEnd()
@@ -201,33 +226,4 @@ internal class YouTubeDataSource private constructor(private val context: Contex
         val REFUSED = setOf(401, 403, 404, 410)
         val CONTENT_RANGE = Regex("""bytes (\d+)-(\d+)/(\d+|\*)""")
     }
-}
-
-/** Sends every address to the source that reads it: YouTube Music, or the Spotify chain. */
-@UnstableApi
-internal class RoutingDataSourceFactory(
-    private val spotify: DataSource.Factory,
-    private val youtube: DataSource.Factory,
-) : DataSource.Factory {
-    override fun createDataSource(): DataSource = RoutingDataSource(spotify, youtube)
-}
-
-@UnstableApi
-private class RoutingDataSource(
-    private val spotifyFactory: DataSource.Factory,
-    private val youtubeFactory: DataSource.Factory,
-) : DataSource {
-    private val listeners = ArrayList<androidx.media3.datasource.TransferListener>()
-    private var current: DataSource? = null
-    override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) { listeners += transferListener }
-    override fun open(dataSpec: DataSpec): Long {
-        val source = (if (YouTubeUris.isYouTube(dataSpec.uri)) youtubeFactory else spotifyFactory).createDataSource()
-        listeners.forEach(source::addTransferListener)
-        current = source
-        return source.open(dataSpec)
-    }
-    override fun read(buffer: ByteArray, offset: Int, length: Int): Int = checkNotNull(current).read(buffer, offset, length)
-    override fun getUri(): Uri? = current?.uri
-    override fun getResponseHeaders(): Map<String, List<String>> = current?.responseHeaders.orEmpty()
-    override fun close() { try { current?.close() } finally { current = null } }
 }

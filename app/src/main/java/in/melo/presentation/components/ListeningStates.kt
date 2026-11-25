@@ -12,18 +12,8 @@ import `in`.melo.ui.theme.MeloLayout
 
 @Composable
 fun ListeningStatusCard(title: String, message: String, action: String, onAction: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(modifier.fillMaxWidth(), shape = MeloLayout.CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            MeloButton(
-                text = action,
-                onClick = onAction,
-                size = MeloButtonSize.Medium,
-                style = MeloButtonStyle.Text,
-            )
-        }
-    }
+    // Every load failure and empty shelf reads as the one centred message state.
+    MeloMessageState(title = title, message = message, action = action, onAction = onAction, modifier = modifier)
 }
 
 @Composable

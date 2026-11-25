@@ -26,6 +26,7 @@ import `in`.melo.data.model.toMusic
 import `in`.melo.data.model.toSong
 import `in`.melo.data.preferences.AlbumArtPaletteStyle
 import `in`.melo.data.preferences.AppSettings
+import `in`.melo.data.preferences.lyricsProviderList
 import `in`.melo.data.preferences.SettingsStore
 import `in`.melo.data.preferences.AlbumArtQuality
 import `in`.melo.data.preferences.CarouselStyle
@@ -56,6 +57,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -69,6 +71,14 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Stable
+private fun formatTimerLeft(ms: Long): String {
+    val seconds = (ms + 999) / 1000
+    val h = seconds / 3600
+    val m = seconds / 60 % 60
+    val sec = seconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+}
+
 class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
     private val context: Context get() = model.getApplication()
     private val colorProcessor by lazy { ColorSchemeProcessor(context) }
@@ -199,7 +209,6 @@ class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
             navBarStyle = s.navBarStyle,
             carouselStyle = s.carouselStyle,
             tapBackgroundClosesPlayer = s.tapBackgroundClosesPlayer,
-            useSmoothCorners = s.useSmoothCorners,
             playerThemePreference = s.playerTheme,
         )
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, PlayerConfigSlice())
@@ -234,11 +243,19 @@ class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
         val currentSongAlbum: Music? = null,
         val albumArtQuality: AlbumArtQuality = AlbumArtQuality.HIGH,
         val audioMetaText: String? = null,
+        /** A better copy of the playing track is being looked for. */
+        val qualityUpgrading: Boolean = false,
     )
     private val mutableSlice = MutableStateFlow(FullPlayerSlice())
     val fullPlayerSlice: StateFlow<FullPlayerSlice> =
-        combine(mutableSlice, model.player.state.map { it.audioFormat }.distinctUntilChanged(), settings) { slice, format, s ->
-            slice.copy(audioMetaText = format.takeIf { s.showPlayerFileInfo && it.isNotBlank() })
+        combine(
+            mutableSlice, model.player.state.map { it.audioFormat to it.track?.id }.distinctUntilChanged(), settings,
+            `in`.melo.playback.LosslessUpgrade.searching,
+        ) { slice, (format, id), s, searching ->
+            slice.copy(
+                audioMetaText = format.takeIf { s.showPlayerFileInfo && it.isNotBlank() },
+                qualityUpgrading = s.showPlayerFileInfo && id != null && searching == id,
+            )
         }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, FullPlayerSlice())
 
     /** Formats measured while a Spotify track played: the only quality this app can state for it. */
@@ -499,70 +516,43 @@ class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
     }
 
     // Sleep timer -------------------------------------------------------------------------------
-    private var sleepJob: Job? = null
-    private val mutableTimerDisplay = MutableStateFlow<String?>(null)
-    val activeTimerValueDisplay: StateFlow<String?> = mutableTimerDisplay.asStateFlow()
-    private val mutableTimerMinutes = MutableStateFlow<Int?>(null)
-    val activeTimerDurationMinutes: StateFlow<Int?> = mutableTimerMinutes.asStateFlow()
-    private val mutableEndOfTrack = MutableStateFlow(false)
-    val isEndOfTrackTimerActive: StateFlow<Boolean> = mutableEndOfTrack.asStateFlow()
+    // The timer itself lives with playback (SleepTimer, watched by the playback service), so it
+    // keeps running when these screens are gone. Here it is only shown and set.
+    private val timer = `in`.melo.playback.SleepTimer
 
-    fun setSleepTimer(minutes: Int) {
-        cancelSleepTimer()
-        mutableTimerMinutes.value = minutes
-        sleepJob = scope.launch {
-            var remaining = minutes * 60
-            while (remaining > 0) {
-                mutableTimerDisplay.value = "%d:%02d".format(remaining / 60, remaining % 60)
-                delay(1000)
-                remaining--
+    /** The time left as m:ss, or the songs left, or null when no timer is set. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val activeTimerValueDisplay: StateFlow<String?> =
+        kotlinx.coroutines.flow.combine(timer.deadline, timer.songsLeft) { deadline, songs -> deadline to songs }
+            .transformLatest { (deadline, songs) ->
+                when {
+                    deadline != null -> while (true) {
+                        val left = timer.remainingMs() ?: break
+                        emit(formatTimerLeft(left))
+                        if (left <= 0) break
+                        delay(left % 1000 + 1)
+                    }
+                    songs == 1 -> emit(context.getString(R.string.timer_end_track))
+                    songs > 1 -> emit(context.getString(R.string.sleep_timer_songs_left, songs))
+                    else -> emit(null)
+                }
             }
-            model.player.pause()
-            cancelSleepTimer()
-        }
-    }
-    fun setEndOfTrackTimer(enable: Boolean) {
-        cancelSleepTimer()
-        if (!enable) return
-        mutableEndOfTrack.value = true
-        mutableTimerDisplay.value = context.getString(R.string.timer_end_track)
-        val songId = stablePlayerState.value.currentSong?.id
-        sleepJob = scope.launch {
-            stablePlayerState.first { it.currentSong?.id != songId }
-            model.player.pause()
-            cancelSleepTimer()
-        }
-    }
-    private val mutablePlayCount = MutableStateFlow(0f)
-    val playCount: StateFlow<Float> = mutablePlayCount.asStateFlow()
-    private var countedJob: Job? = null
+            .stateIn(scope, SharingStarted.Eagerly, null)
+    val activeTimerDurationMinutes: StateFlow<Int?> = timer.minutes.asStateFlow()
+    val isEndOfTrackTimerActive: StateFlow<Boolean> =
+        timer.songsLeft.map { it == 1 }.stateIn(scope, SharingStarted.Eagerly, false)
 
-    /** Pauses once [count] more tracks have started. */
-    fun playCounted(count: Int) {
-        cancelCountedPlay()
-        if (count <= 0) return
-        mutablePlayCount.value = count.toFloat()
-        countedJob = scope.launch {
-            var remaining = count
-            stablePlayerState.map { it.currentSong?.id }.distinctUntilChanged().drop(1).collect {
-                remaining--
-                mutablePlayCount.value = remaining.toFloat()
-                if (remaining <= 0) { model.player.pause(); cancelCountedPlay() }
-            }
-        }
-    }
-    fun cancelCountedPlay() {
-        countedJob?.cancel()
-        countedJob = null
-        mutablePlayCount.value = 0f
-    }
-    fun cancelSleepTimer() {
-        sleepJob?.cancel()
-        sleepJob = null
-        mutableTimerDisplay.value = null
-        mutableTimerMinutes.value = null
-        mutableEndOfTrack.value = false
-    }
+    fun setSleepTimer(minutes: Int) = timer.start(minutes)
+    fun setEndOfTrackTimer(enable: Boolean) = if (enable) timer.startAfterSongs(1) else timer.cancel()
+
+    /** Songs still to finish before pausing, the playing one included; 0 when off. */
+    val playCount: StateFlow<Float> =
+        timer.songsLeft.map { it.toFloat() }.stateIn(scope, SharingStarted.Eagerly, 0f)
+
+    /** Pauses once [count] songs have finished, the playing one first. */
+    fun playCounted(count: Int) = if (count > 0) timer.startAfterSongs(count) else timer.cancel()
+    fun cancelCountedPlay() { if (timer.songsLeft.value > 0) timer.cancel() }
+    fun cancelSleepTimer() = timer.cancel()
 
     // Downloads ---------------------------------------------------------------------------------
     val downloads: StateFlow<Map<String, DownloadedTrack>> = DownloadCenter.downloads
@@ -651,7 +641,7 @@ class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
     val isImmersiveTemporarilyDisabled: StateFlow<Boolean> = mutableImmersiveDisabled.asStateFlow()
     private var lyricsJob: Job? = null
 
-    /** Loads the current track's lyrics: saved ones, then Spotify, then LRCLIB if the setting allows. */
+    /** Loads the current track's lyrics: saved ones, then Spotify and the lyrics providers left on in Settings. */
     fun loadLyricsForCurrentSong() {
         val song = stablePlayerState.value.currentSong ?: return
         val known = mutableLyrics.value
@@ -661,8 +651,9 @@ class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
         mutableLyrics.value = LyricsState(song.id, loading = true, offset = offset)
         lyricsJob = scope.launch {
             val lyrics = lyricsRepository.cached(song.id)
-                ?: lyricsRepository.fromSpotify(song, model.lyricsSource())
-                ?: if (settings.value.lyricsFallback) lyricsRepository.fromLrcLib(song) else null
+                ?: lyricsRepository.find(song, model.lyricsSource(), settings.value.lyricsProviderList()) { early ->
+                    mutableLyrics.value = LyricsState(song.id, lyrics = early, loading = true, offset = offset)
+                }
             mutableLyrics.value = LyricsState(song.id, lyrics = lyrics, offset = offset)
         }
     }
@@ -672,7 +663,9 @@ class PlayerViewModel(val model: MeloModel, private val scope: CoroutineScope) {
         lyricsJob?.cancel()
         mutableLyricsSearch.value = LyricsSearchUiState.Loading
         lyricsJob = scope.launch {
-            val direct = if (forcePick) null else lyricsRepository.fromSpotify(song, model.lyricsSource()) ?: lyricsRepository.fromLrcLib(song)
+            // Asked for by hand, so LRCLIB is asked even when it is switched off for automatic lookups.
+            val providers = (settings.value.lyricsProviderList() + `in`.melo.data.repository.LyricsProvider.LRCLIB).distinct()
+            val direct = if (forcePick) null else lyricsRepository.find(song, model.lyricsSource(), providers)
             if (direct != null) {
                 mutableLyrics.update { it.copy(songId = song.id, lyrics = direct, loading = false) }
                 mutableLyricsSearch.value = LyricsSearchUiState.Success(direct)

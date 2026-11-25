@@ -427,6 +427,7 @@ internal suspend fun authenticatedSpotifyRequest(
     operation: String,
     body: ByteArray? = null,
     contentType: String = "application/x-protobuf",
+    expected: Set<Int> = emptySet(),
 ): ByteArray {
     suspend fun send(headers: SpotifySession.Headers): ByteArray {
         val builder = Request.Builder().url(url)
@@ -435,7 +436,7 @@ internal suspend fun authenticatedSpotifyRequest(
             .header("Accept", contentType)
         if (body != null) builder.post(body.toRequestBody(contentType.toMediaType()))
         else builder.header("x-accept-list-items", "audio-track")
-        return transport.send(builder.build(), operation)
+        return transport.send(builder.build(), operation, expected)
     }
     val headers = session.headers(url.host)
     return try {

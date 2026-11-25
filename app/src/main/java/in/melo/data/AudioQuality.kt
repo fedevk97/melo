@@ -1,24 +1,48 @@
 package `in`.melo.data
 
+import android.content.Context
+import android.net.ConnectivityManager
+import `in`.melo.data.preferences.AppSettings
+
 /**
- * Audio quality presets. On the HLS path the service offers two AAC variants per track,
- * 128 and 256 kbit/s, so these are the levels a preset can select.
+ * How good the stream may be, chosen separately for Wi-Fi and for mobile data. The lower rungs cap
+ * the YouTube Music format that is picked; High takes the best one offered; Lossless adds the switch
+ * to an add-on's bit-exact copy of the same recording when one is found.
  */
 enum class AudioQuality(val key: String) {
-    /** 256 kbit/s on an unmetered connection, 128 kbit/s on a metered one. */
-    AUTO("auto"),
+    /** The smallest stream, around 50 kbit/s. */
+    LOW("low"),
+    /** Up to about 128 kbit/s. */
     NORMAL("normal"),
-    VERY_HIGH("very_high");
+    /** The best stream YouTube Music offers. */
+    HIGH("high"),
+    /** High, upgraded to an add-on's lossless copy while it plays. */
+    LOSSLESS("lossless");
 
-    fun bandwidth(metered: Boolean): Long = when (this) {
-        AUTO -> if (metered) NORMAL_BANDWIDTH else VERY_HIGH_BANDWIDTH
-        NORMAL -> NORMAL_BANDWIDTH
-        VERY_HIGH -> VERY_HIGH_BANDWIDTH
+    /** The highest bitrate a YouTube Music format may have at this rung, or null for no limit. */
+    val ceiling: Long? get() = when (this) {
+        LOW -> 72_000L
+        NORMAL -> 136_000L
+        HIGH, LOSSLESS -> null
     }
 
     companion object {
         const val NORMAL_BANDWIDTH = 128_000L
         const val VERY_HIGH_BANDWIDTH = 256_000L
-        fun of(key: String): AudioQuality = entries.firstOrNull { it.key == key } ?: AUTO
+
+        val WifiDefault = LOSSLESS
+        val MobileDefault = HIGH
+
+        /** Reads a stored key; the older "auto" and "very_high" keys and unknown ones take [default]. */
+        fun of(key: String, default: AudioQuality): AudioQuality = entries.firstOrNull { it.key == key } ?: default
+
+        /** The rung that applies on the connection in use now. */
+        fun current(context: Context, settings: AppSettings): AudioQuality {
+            val metered = runCatching {
+                context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered
+            }.getOrNull() ?: false
+            return if (metered) of(settings.streamingQualityMobile, MobileDefault)
+            else of(settings.streamingQualityWifi, WifiDefault)
+        }
     }
 }

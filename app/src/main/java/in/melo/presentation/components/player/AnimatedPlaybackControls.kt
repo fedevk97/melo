@@ -1,16 +1,17 @@
 package `in`.melo.presentation.components.player
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import `in`.melo.ui.glass.pressShade
+import `in`.melo.ui.glass.pressSink
+import `in`.melo.ui.glass.rememberPressDent
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -56,26 +57,36 @@ fun AnimatedPlaybackControls(
     Row(modifier.fillMaxWidth().heightIn(min = height),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { feedback(onPrevious) }, modifier = Modifier.size(64.dp)) {
-            Icon(Icons.Rounded.SkipPrevious, stringResource(R.string.melo_previous),
+        val previousDent = rememberPressDent()
+        IconButton(onClick = { feedback(onPrevious) }, modifier = Modifier.size(64.dp).pressSink(previousDent),
+            interactionSource = previousDent.interactions) {
+            Icon(MeloIcons.SkipPrevious, stringResource(R.string.melo_previous),
                 Modifier.size(iconSize), tint = LocalMaterialTheme.current.onSurface)
         }
-        FilledIconButton(onClick = { feedback(onPlayPause) }, modifier = Modifier.size(height.coerceIn(64.dp, 80.dp)),
+        // Sinks under the finger and its light turns over, like a pushed-in dish.
+        val playDent = rememberPressDent()
+        FilledIconButton(onClick = { feedback(onPlayPause) },
+            modifier = Modifier.size(height.coerceIn(64.dp, 80.dp)).pressSink(playDent),
+            interactionSource = playDent.interactions,
             shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = colorPlayPause, contentColor = tintPlayPauseIcon)) {
+          Box(Modifier.fillMaxSize().pressShade(playDent), contentAlignment = Alignment.Center) {
             if (buffering) {
                 LoadingIndicator(
                     modifier = Modifier.size(28.dp).semantics { contentDescription = bufferingDescription },
                     color = tintPlayPauseIcon,
                 )
             } else {
-                Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                Icon(if (playing) MeloIcons.Pause else MeloIcons.PlayArrow,
                     stringResource(if (playing) R.string.melo_pause else R.string.common_play),
                     Modifier.size(playPauseIconSize))
             }
+          }
         }
-        IconButton(onClick = { feedback(onNext) }, modifier = Modifier.size(64.dp)) {
-            Icon(Icons.Rounded.SkipNext, stringResource(R.string.melo_next),
+        val nextDent = rememberPressDent()
+        IconButton(onClick = { feedback(onNext) }, modifier = Modifier.size(64.dp).pressSink(nextDent),
+            interactionSource = nextDent.interactions) {
+            Icon(MeloIcons.SkipNext, stringResource(R.string.melo_next),
                 Modifier.size(iconSize), tint = LocalMaterialTheme.current.onSurface)
         }
     }

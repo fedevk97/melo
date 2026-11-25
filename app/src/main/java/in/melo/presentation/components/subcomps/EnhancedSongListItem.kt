@@ -1,5 +1,13 @@
 package `in`.melo.presentation.components.subcomps
 
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.ui.theme.artworkOutline
+import `in`.melo.ui.theme.label
+import `in`.melo.ui.theme.pressedFill
+import `in`.melo.ui.theme.secondaryLabel
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.IconButton
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Spring
@@ -21,9 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -131,23 +136,20 @@ fun EnhancedSongListItem(
     // Share one transition across the item and derive the visual properties from a
     // couple of progress values instead of animating each color/radius independently.
     val highlightProgress by transition.animateFloat(
-        transitionSpec = { tween(durationMillis = 400) },
+        transitionSpec = { `in`.melo.ui.theme.MeloMotion.emphasisedSpec() },
         label = "highlightProgress"
     ) { state ->
         if (state.isHighlighted) 1f else 0f
     }
     val selectionVisualProgress by transition.animateFloat(
-        transitionSpec = { tween(durationMillis = 250) },
+        transitionSpec = { `in`.melo.ui.theme.MeloMotion.standardSpec() },
         label = "selectionVisualProgress"
     ) { state ->
         if (state.isSelected) 1f else 0f
     }
     val selectionScaleProgress by transition.animateFloat(
         transitionSpec = {
-            spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessLow
-            )
+            `in`.melo.ui.theme.MeloMotion.pressSpec()
         },
         label = "selectionScaleProgress"
     ) { state ->
@@ -155,9 +157,10 @@ fun EnhancedSongListItem(
     }
 
     val animatedCornerRadius = if (compact) 10.dp else 12.dp
-    val animatedAlbumCornerRadius = 8.dp
+    // Row artwork is small, so it takes the small artwork corner, as Apple Music's lists do.
+    val animatedAlbumCornerRadius = `in`.melo.ui.theme.MeloLayout.CornerSmall
     val selectionScale = lerpFloat(1f, 0.98f, selectionScaleProgress)
-    val selectionBorderWidth = lerpDp(0.dp, 2.5.dp, selectionVisualProgress)
+    val selectionBorderWidth = lerpDp(0.dp, 1.5.dp, selectionVisualProgress)
 
     val surfaceShape = remember(animatedCornerRadius, customShape, isHighlighted) {
         if (customShape != null && !isHighlighted) {
@@ -173,16 +176,13 @@ fun EnhancedSongListItem(
 
     val colors = MaterialTheme.colorScheme
     val baseContainerColor = containerColorOverride ?: Color.Transparent
-    val playbackContainerColor = lerpColor(baseContainerColor, colors.primaryContainer, highlightProgress)
-    val containerColor = lerpColor(playbackContainerColor, colors.secondaryContainer, selectionVisualProgress)
-
-    val baseContentColor = colors.onSurface
-    val playbackContentColor = lerpColor(baseContentColor, colors.onPrimaryContainer, highlightProgress)
-    val contentColor = lerpColor(playbackContentColor, colors.onSecondaryContainer, selectionVisualProgress)
+    // The playing row is not filled in: it is marked by bars over its artwork and a
+    // heavier title, as in Apple Music. A selected row takes a quiet pressed fill.
+    val containerColor = lerpColor(baseContainerColor, colors.pressedFill.compositeOver(colors.surface), selectionVisualProgress)
+    val contentColor = colors.label
+    val secondaryContentColor = colors.secondaryLabel
 
     val selectionBorderColor = lerpColor(colors.primary.copy(alpha = 0f), colors.primary, selectionVisualProgress)
-    val mvContainerColor = lerpColor(colors.onSurface, colors.primaryContainer, highlightProgress)
-    val mvContentColor = lerpColor(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress)
     val selectionOverlayColor = lerpColor(
         Color.Transparent,
         colors.primary.copy(alpha = MeloAlpha.Secondary),
@@ -301,7 +301,8 @@ fun EnhancedSongListItem(
                     Box(
                         modifier = Modifier
                             .size(albumArtSize)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, albumShape)
+                            .artworkOutline(albumShape)
                     ) {
                         SmartImage(
                             model = song.albumArtUriString,
@@ -310,6 +311,18 @@ fun EnhancedSongListItem(
                             targetSize = Size(albumArtTargetSizePx, albumArtTargetSizePx),
                             modifier = Modifier.fillMaxSize()
                         )
+                        if (isCurrentSong && !isSelectionMode) {
+                            Box(
+                                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f * highlightProgress), albumShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                PlayingEqIcon(
+                                    modifier = Modifier.size(width = 18.dp, height = 16.dp),
+                                    color = Color.White.copy(alpha = highlightProgress),
+                                    isPlaying = isPlaying,
+                                )
+                            }
+                        }
                         
                         // Selection check overlay on album art
                         if (showSelectionDecoration) {
@@ -331,7 +344,7 @@ fun EnhancedSongListItem(
                                     )
                                 } else {
                                     Icon(
-                                        imageVector = Icons.Rounded.CheckCircle,
+                                        imageVector = MeloIcons.CheckCircle,
                                         contentDescription = stringResource(R.string.common_selected),
                                         tint = selectionOverlayContentColor,
                                         modifier = Modifier.size(28.dp)
@@ -340,7 +353,7 @@ fun EnhancedSongListItem(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.width(if (compact) 12.dp else 14.dp))
+                    Spacer(modifier = Modifier.width(`in`.melo.ui.theme.MeloLayout.RowArtGap))
                 } else {
                     Spacer(modifier = Modifier.width(4.dp))
                 }
@@ -353,36 +366,37 @@ fun EnhancedSongListItem(
                         AutoScrollingText(
                             text = song.title,
                             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                            gradientEdgeColor = containerColor,
+                            gradientEdgeColor = containerColorOverride ?: colors.background,
                         )
 
                     } else {
                         Text(
                             text = song.title,
                             style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal,
                             maxLines = 1,
                             color = contentColor,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Spacer(modifier = Modifier.height(if (compact) 1.dp else 4.dp))
+                    Spacer(modifier = Modifier.height(if (compact) 1.dp else 2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (showSourceBadge && `in`.melo.presentation.components.LocalSourceBadges.current) {
-                            `in`.melo.presentation.components.SourceBadge(song.source, Modifier.padding(end = MeloLayout.Space2), contentColor.copy(alpha = MeloAlpha.Secondary))
+                            `in`.melo.presentation.components.SourceBadge(song.source, Modifier.padding(end = MeloLayout.Space2), secondaryContentColor)
                         }
                         TrackDownloadIndicator(song.id, song.title)
                         Text(
                             text = supportingText ?: LocalTrackQuality.current(song)?.let { "${song.displayArtist} · $it" } ?: song.displayArtist,
                             style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
-                            color = contentColor.copy(alpha = MeloAlpha.Secondary),
+                            color = secondaryContentColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
                 
-                val showPlayingIndicator = isCurrentSong && !isSelectionMode
+                // With artwork the bars sit on it; without, they keep their place at the end.
+                val showPlayingIndicator = isCurrentSong && !isSelectionMode && !showAlbumArt
                 val showTrailingAction = showMoreOptionsButton && !isSelectionMode
 
                 if (showPlayingIndicator) {
@@ -396,24 +410,22 @@ fun EnhancedSongListItem(
                 }
 
                 if (showPlayingIndicator || showTrailingAction) {
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(`in`.melo.ui.theme.MeloLayout.Space2))
                 }
 
                 if (showTrailingAction) {
-                    FilledIconButton(
+                    // A bare "more" glyph hanging into the row's end padding, as Apple's lists draw it.
+                    IconButton(
                         onClick = { onMoreOptionsClick(song) },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = mvContentColor,
-                            contentColor = mvContainerColor
-                        ),
                         modifier = Modifier
-                            .size(36.dp)
-                            .padding(end = 4.dp)
+                            .size(`in`.melo.ui.theme.MeloLayout.ControlVisual)
+                            .offset(x = `in`.melo.ui.theme.MeloLayout.Space2)
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.MoreVert,
+                            imageVector = MeloIcons.MoreHoriz,
                             contentDescription = stringResource(R.string.common_more_options_for, song.title),
-                            modifier = Modifier.size(24.dp)
+                            tint = contentColor,
+                            modifier = Modifier.size(`in`.melo.ui.theme.MeloLayout.IconDefault)
                         )
                     }
                 }

@@ -1,5 +1,7 @@
 # Playlist writes
 
+> **Melo today:** Melo no longer loads the native engine. It writes playlists with Playlist4 over HTTP: `POST playlist/v2/playlist/{id}/changes` with a `ListChanges` body (ADD, REM by item ID, UPDATE_LIST_ATTRIBUTES), and the same on `playlist/v2/user/{username}/rootlist` to create, publish and unfollow. The Esperanto route below is what the official app does.
+
 The official app does not edit playlists with plain HTTP calls. It sends Esperanto requests to the native core, which applies them locally and syncs them to Playlist4 in the background. A third-party client can do the same by loading the native engine (see [08-native-engine.md](08-native-engine.md)) and calling these services through its Cosmos router.
 
 | Service | Method | Purpose |

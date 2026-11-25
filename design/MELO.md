@@ -17,7 +17,7 @@ Use semantic Material color roles rather than ad hoc screen colors. Meaningful c
 
 ## App mark
 
-The app mark uses the user-supplied dotted play symbol, open ring, subtle outer dot ring, and grey audio pulse. `melo-mark.svg` preserves the supplied vector master; `melo-logo.png` is the 512 px export. Android foreground geometry follows the SVG without a baked-in rounded mask. Themed icons preserve the layers through opacity. The small notification icon retains the main mark and audio pulse, omitting the decorative outer ring for clarity. Album artwork stays in full colour.
+The app mark is the M: two soft peaks, the second overlapping the first, in a mint-to-green gradient. `melo-mark.svg` is the vector master and `melo-logo.png` the 512 px export on Melo's black. The launcher icon comes in Mint, Ice Blue, Amethyst, Emerald and Monochrome; the splash screen raises the M in the colour of the icon it was opened from. The notification icon is the plain white M, and the lyrics share card and the app's headers use the same shape, tinted to fit. Album artwork stays in full colour.
 
 ## Typography
 

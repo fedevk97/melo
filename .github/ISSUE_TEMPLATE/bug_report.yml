@@ -45,8 +45,8 @@ body:
     attributes:
       label: Build type
       options:
-        - Built with the native engine (Spotify APKM supplied)
-        - Built with -PnativeRuntime=false
+        - GitHub release
+        - Built from source
         - CI artifact
         - Not sure
     validations:

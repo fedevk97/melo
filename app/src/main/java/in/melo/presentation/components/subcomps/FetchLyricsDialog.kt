@@ -1,5 +1,8 @@
 package `in`.melo.presentation.components.subcomps
 
+import `in`.melo.ui.glass.MeloSwitch
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -17,12 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CloudUpload
-import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -31,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -163,7 +159,7 @@ private fun IdleContent(
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = Icons.Rounded.MusicNote,
+            imageVector = MeloIcons.MusicNote,
             contentDescription = null,
             modifier = Modifier.size(40.dp),
             tint = MaterialTheme.colorScheme.onSecondaryContainer
@@ -231,7 +227,7 @@ private fun IdleContent(
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = MeloAlpha.Secondary)
                 )
             }
-            Switch(
+            MeloSwitch(
                 checked = forcePickResults,
                 onCheckedChange = onToggleForcePickResults,
                 colors = SwitchDefaults.colors(
@@ -253,7 +249,7 @@ private fun IdleContent(
             text = stringResource(R.string.common_search),
             onClick = onSearch,
             modifier = Modifier.fillMaxWidth(),
-            icon = Icons.Rounded.Search,
+            icon = MeloIcons.Search,
             size = MeloButtonSize.Large,
         )
 
@@ -261,7 +257,7 @@ private fun IdleContent(
             text = stringResource(R.string.common_import),
             onClick = onImport,
             modifier = Modifier.fillMaxWidth(),
-            icon = Icons.Rounded.CloudUpload,
+            icon = MeloIcons.CloudUpload,
             size = MeloButtonSize.Large,
             style = MeloButtonStyle.Tonal,
             containerColor = MaterialTheme.colorScheme.secondary,
@@ -374,7 +370,7 @@ private fun ResultItemCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.MusicNote,
+                    imageVector = MeloIcons.MusicNote,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                     tint = if (hasSyncedLyrics) MaterialTheme.colorScheme.onPrimaryContainer
@@ -455,7 +451,7 @@ fun NotFoundContent(
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = Icons.Rounded.SearchOff,
+            imageVector = MeloIcons.SearchOff,
             contentDescription = null,
             modifier = Modifier.size(36.dp),
             tint = MaterialTheme.colorScheme.onSecondaryContainer
@@ -534,7 +530,7 @@ fun NotFoundContent(
             },
             enabled = title.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
-            icon = Icons.Rounded.Search,
+            icon = MeloIcons.Search,
             size = MeloButtonSize.Large,
         )
 
@@ -561,7 +557,7 @@ private fun ErrorContent(
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = Icons.Rounded.ErrorOutline,
+            imageVector = MeloIcons.ErrorOutline,
             contentDescription = null,
             modifier = Modifier.size(36.dp),
             tint = MaterialTheme.colorScheme.onErrorContainer
@@ -651,7 +647,7 @@ private fun ErrorContent(
 //                                    onClick = onImport,
 //                                    modifier = Modifier.weight(1f)
 //                                ) {
-//                                    Icon(painter = painterResource(R.drawable.rounded_upload_file_24), contentDescription = null, modifier = Modifier.size(18.dp))
+//                                    Icon(painter = meloPainter(R.drawable.rounded_upload_file_24), contentDescription = null, modifier = Modifier.size(18.dp))
 //                                    Spacer(modifier = Modifier.width(8.dp))
 //                                    Text(stringResource(R.string.common_import), maxLines = 1, overflow = TextOverflow.Ellipsis)
 //                                }
@@ -659,7 +655,7 @@ private fun ErrorContent(
 //                                    onClick = onConfirm,
 //                                    modifier = Modifier.weight(1f)
 //                                ) {
-//                                    Icon(painter = painterResource(R.drawable.rounded_manage_search_24), contentDescription = null, modifier = Modifier.size(18.dp))
+//                                    Icon(painter = meloPainter(R.drawable.rounded_manage_search_24), contentDescription = null, modifier = Modifier.size(18.dp))
 //                                    Spacer(modifier = Modifier.width(8.dp))
 //                                    Text(stringResource(R.string.common_search), maxLines = 1, overflow = TextOverflow.Ellipsis)
 //                                }
@@ -752,7 +748,7 @@ private fun ErrorContent(
 //                            horizontalAlignment = Alignment.CenterHorizontally
 //                        ) {
 //                            Icon(
-//                                imageVector = Icons.Rounded.ErrorOutline,
+//                                imageVector = MeloIcons.ErrorOutline,
 //                                contentDescription = null,
 //                                modifier = Modifier.size(28.dp),
 //                                tint = MaterialTheme.colorScheme.error
@@ -803,7 +799,7 @@ private fun ErrorContent(
 //                         modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
 //                     ) {
 //                         Icon(
-//                             imageVector = Icons.Rounded.Close,
+//                             imageVector = MeloIcons.Close,
 //                             contentDescription = stringResource(R.string.common_cancel)
 //                         )
 //                     }
@@ -834,7 +830,7 @@ private fun ErrorContent(
 //            contentAlignment = Alignment.Center
 //        ) {
 //            Icon(
-//                imageVector = Icons.Rounded.MusicNote,
+//                imageVector = MeloIcons.MusicNote,
 //                contentDescription = null,
 //                modifier = Modifier.size(24.dp),
 //                tint = MaterialTheme.colorScheme.onSecondaryContainer
@@ -872,7 +868,7 @@ private fun ErrorContent(
 //        label = { Text(text = query) },
 //        icon = {
 //            Icon(
-//                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+//                imageVector = MeloIcons.ArrowForward,
 //                contentDescription = null
 //            )
 //        }

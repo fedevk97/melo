@@ -69,6 +69,7 @@ fun AppNavigation(
         composable(Screen.Settings.route) { SettingsScreen(model, navController) }
         composable(Screen.History.route) { `in`.melo.presentation.screens.HistoryScreen(model, navController) }
         composable(Screen.GoogleSignIn.route) { `in`.melo.presentation.screens.GoogleSignInScreen(model, navController) }
+        composable(Screen.DiscordLogin.route) { `in`.melo.presentation.screens.DiscordLoginScreen(model, navController) }
         composable(
             Screen.Convert.route,
             arguments = listOf(navArgument("playlistId") { type = NavType.StringType }, navArgument("target") { type = NavType.StringType }),

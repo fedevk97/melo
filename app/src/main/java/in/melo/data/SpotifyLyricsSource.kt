@@ -16,7 +16,10 @@ class SpotifyLyricsSource internal constructor(
             .addQueryParameter("format", "json").addQueryParameter("vocalRemoval", "false")
             .addQueryParameter("market", "from_token").build()
         val bytes = try {
-            authenticatedSpotifyRequest(transport, session, url, "Spotify lyrics", contentType = "application/json")
+            // A 404 is Spotify's answer for a track without lyrics, not a failure to report.
+            authenticatedSpotifyRequest(
+                transport, session, url, "Spotify lyrics", contentType = "application/json", expected = setOf(404),
+            )
         } catch (failure: SpotifyFailure) {
             if (failure.status == 404) return null
             throw failure

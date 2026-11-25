@@ -1,5 +1,6 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -19,9 +20,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,8 +46,8 @@ import `in`.melo.presentation.viewmodel.PlayerViewModel
 @Composable
 private fun Cover(item: Music, ui: PlayerViewModel, placeholder: Color, shape: androidx.compose.ui.graphics.Shape, modifier: Modifier) {
     Box(modifier.clip(shape).background(placeholder), contentAlignment = Alignment.Center) {
-        if (item.id == ui.likedSongs.id) Icon(Icons.Rounded.Favorite, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
-        else if (item.imageUrl == null) Icon(Icons.Rounded.MusicNote, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (item.id == ui.likedSongs.id) Icon(MeloIcons.Favorite, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
+        else if (item.imageUrl == null) Icon(MeloIcons.MusicNote, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         else SmartImage(model = item.imageUrl, contentDescription = item.title, contentScale = ContentScale.Crop, shape = shape, modifier = Modifier.fillMaxSize())
     }
 }
@@ -77,13 +75,17 @@ private fun CardTexts(item: Music, centered: Boolean, modifier: Modifier) {
 @Composable
 internal fun ShelfCoverCard(item: Music, ui: PlayerViewModel, modifier: Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
     val round = item.kind == MusicKind.Artist
-    val shape = MeloLayout.ArtworkShape
-    Box(modifier.clip(shape).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
-        Column {
-            Cover(item, ui, MaterialTheme.colorScheme.surfaceContainerHighest, if (round) CircleShape else MeloLayout.ArtworkShape,
-                Modifier.fillMaxWidth().aspectRatio(1f))
-            CardTexts(item, round, Modifier.padding(top = 12.dp, bottom = 4.dp))
-        }
+    val shape = if (round) MeloLayout.ArtistShape else MeloLayout.ArtworkShape
+    `in`.melo.presentation.components.MeloShelfCard(
+        title = item.title,
+        subtitle = item.subtitle.ifBlank { item.kind.label },
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier,
+        shape = shape,
+        centered = round,
+    ) {
+        Cover(item, ui, MaterialTheme.colorScheme.surfaceContainerHighest, shape, Modifier.fillMaxSize())
     }
 }
 

@@ -1,14 +1,19 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.data.TourTarget
+import `in`.melo.presentation.components.onboarding.tourAnchor
+import `in`.melo.ui.glass.meloMenuColors
+import `in`.melo.ui.glass.meloPopupPanel
+import `in`.melo.ui.glass.PopupWindowEffects
+import `in`.melo.ui.glass.rememberPopupFrost
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.core.tween
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.SwapVert
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,15 +44,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeTopAppBar
@@ -60,6 +62,7 @@ import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,11 +70,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -125,7 +130,7 @@ fun GenreGradientTopBar(
                 )
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    imageVector = MeloIcons.ArrowBack,
                     contentDescription = stringResource(R.string.common_back),
                     tint = startColor
                 )
@@ -155,11 +160,16 @@ fun HomeGradientTopBar(
     spotifyProfile: SpotifyUserProfile? = null,
     onProfileClick: (() -> Unit)? = null,
     isScrolled: Boolean = false,
+    /** 0 to 1 as the page scrolls: the large title shrinks into the bar. */
+    titleFold: () -> Float = { 0f },
     transparentContainer: Boolean = false,
     refreshing: Boolean = false,
     pullFraction: () -> Float = { 0f },
     animateLogo: Boolean = true,
     settingsButtonDirect: Boolean = false,
+    title: String? = null,
+    /** Shows Melo's M as the page title instead of [title], which is then read out by screen readers. */
+    markAsTitle: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     var menuExpanded by remember { mutableStateOf(false) }
@@ -170,9 +180,57 @@ fun HomeGradientTopBar(
         val topBarContainerColor = if (transparentContainer) Color.Transparent else colors.background
         TopAppBar(
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MeloRefreshLogo(refreshing, pullFraction, animateLogo)
-                    MeloWordmark()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    // The title and its mark shrink into the bar together as the page scrolls.
+                    modifier = Modifier.graphicsLayer {
+                        val s = 1f - 0.22f * titleFold().coerceIn(0f, 1f)
+                        scaleX = s
+                        scaleY = s
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                    },
+                ) {
+                    if (title != null) {
+                        // A large page title, as every tab has; the logo only appears to show a refresh.
+                        // A new page's name rises in as the old one lifts away.
+                        androidx.compose.animation.AnimatedContent(
+                            targetState = title.takeUnless { markAsTitle },
+                            transitionSpec = {
+                                (fadeIn(tween(220, delayMillis = 60)) +
+                                    androidx.compose.animation.slideInVertically(tween(280)) { it / 3 }) togetherWith
+                                    (androidx.compose.animation.fadeOut(tween(160)) +
+                                        androidx.compose.animation.slideOutVertically(tween(220)) { -it / 3 }) using
+                                    androidx.compose.animation.SizeTransform(clip = false) { _, _ -> tween(280) }
+                            },
+                            label = "homePageTitle",
+                        ) { shown ->
+                            if (shown == null) {
+                                MeloMark(refreshing, pullFraction, animateLogo, height = 38.dp, contentDescription = title)
+                            } else {
+                                Text(
+                                    text = shown,
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    color = colors.onSurface,
+                                    maxLines = 1,
+                                    modifier = Modifier.semantics { heading() },
+                                )
+                            }
+                        }
+                        // Beside a written title, Melo's M stays small and doubles as the
+                        // pull-to-refresh indicator.
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = !markAsTitle,
+                            enter = fadeIn(tween(220, delayMillis = 60)) + androidx.compose.animation.expandHorizontally(tween(280)),
+                            exit = androidx.compose.animation.fadeOut(tween(160)) + androidx.compose.animation.shrinkHorizontally(tween(280)),
+                        ) {
+                            MeloMark(refreshing, pullFraction, animateLogo, height = 30.dp)
+                        }
+                    } else {
+                        MeloMark(refreshing, pullFraction, animateLogo, height = 34.dp)
+                        MeloWordmark()
+                    }
                 }
             },
             // The actions are drawn in the Box overlay below so their bounds don't participate in
@@ -187,10 +245,27 @@ fun HomeGradientTopBar(
             modifier = Modifier.align(Alignment.CenterEnd).offset(y = statusBarInset / 2).zIndex(1f)
                 .padding(end = 16.dp),
         ) {
-            IconButton(onClick = onHistoryClick, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Rounded.History, stringResource(R.string.history_title))
+            // While a newer Melo is waiting, its arrow takes the history button's place and brings
+            // the update back up; history is still a tap away on the speed dial.
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val updater = remember(context) { `in`.melo.update.AppUpdater.get(context) }
+            val pendingUpdate by updater.pendingRelease.collectAsState()
+            androidx.compose.animation.Crossfade(pendingUpdate != null, Modifier.tourAnchor(TourTarget.HISTORY), label = "historyOrUpdate") { update ->
+                if (update) {
+                    IconButton(onClick = { updater.reopen() }, modifier = Modifier.size(48.dp)) {
+                        Icon(
+                            MeloIcons.Downloaded,
+                            stringResource(R.string.update_available),
+                            tint = colors.primary,
+                        )
+                    }
+                } else {
+                    IconButton(onClick = onHistoryClick, modifier = Modifier.size(48.dp)) {
+                        Icon(MeloIcons.History, stringResource(R.string.history_title))
+                    }
+                }
             }
-            Box {
+            Box(Modifier.tourAnchor(TourTarget.HOME_MENU)) {
                 IconButton(
                     onClick = {
                         if (settingsButtonDirect) onSettingsClick()
@@ -200,16 +275,16 @@ fun HomeGradientTopBar(
                     modifier = Modifier.size(48.dp),
                 ) {
                     if (settingsButtonDirect) {
-                        Icon(painterResource(R.drawable.rounded_settings_24), stringResource(R.string.common_settings))
+                        Icon(meloPainter(R.drawable.rounded_settings_24), stringResource(R.string.common_settings))
                     } else {
-                        Icon(Icons.Rounded.MoreVert, stringResource(R.string.player_cd_more_options))
+                        Icon(MeloIcons.MoreVert, stringResource(R.string.player_cd_more_options))
                     }
                 }
                 if (homeDialSettingsContent == null && !settingsButtonDirect) {
                     MeloMenu(expanded = menuExpanded, onDismiss = { menuExpanded = false }) {
                         MeloMenuItem(
                             label = stringResource(R.string.common_settings),
-                            icon = { Icon(painterResource(R.drawable.rounded_settings_24), contentDescription = null) },
+                            icon = { Icon(meloPainter(R.drawable.rounded_settings_24), contentDescription = null) },
                             onClick = {
                                 menuExpanded = false
                                 onSettingsClick()
@@ -218,7 +293,7 @@ fun HomeGradientTopBar(
                     }
                 }
             }
-            if (onProfileClick != null) {
+            if (onProfileClick != null) Box(Modifier.tourAnchor(TourTarget.PROFILE)) {
                 MeloProfileAccountButton(
                     profileImageUrl = profileImageUrl,
                     profileName = profileName,
@@ -252,9 +327,7 @@ fun MeloTopActionsCapsule(
 ) {
     val colors = MaterialTheme.colorScheme
     Row(
-        modifier = modifier
-            .background(colors.surface, CircleShape)
-            .border(0.75.dp, colors.outlineVariant.copy(alpha = MeloAlpha.Scrim), CircleShape),
+        modifier = modifier.meloPageGlass(CircleShape),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
@@ -282,7 +355,7 @@ fun MeloProfileAccountButton(
             )
         } else {
             Icon(
-                Icons.Rounded.AccountCircle,
+                MeloIcons.AccountCircle,
                 contentDescription = stringResource(R.string.settings_accounts_title),
                 modifier = Modifier.size(26.dp),
             )
@@ -319,8 +392,8 @@ private fun HomeDialSettingsOverlay(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-        SideEffect { dialogWindow?.setDimAmount(0f) }
+        val frost = rememberPopupFrost()
+        PopupWindowEffects(frost, 14.dp)
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
             val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -334,7 +407,7 @@ private fun HomeDialSettingsOverlay(
             val noRipple = remember { MutableInteractionSource() }
             Box(
                 Modifier.matchParentSize()
-                    .background(colors.scrim.copy(alpha = MeloAlpha.Disabled))
+                    .background(`in`.melo.ui.glass.menuScrimColor())
                     .clickable(interactionSource = noRipple, indication = null, onClick = onDismiss),
             )
             AnimatedVisibility(
@@ -350,17 +423,10 @@ private fun HomeDialSettingsOverlay(
                     modifier = Modifier.padding(top = panelTop, end = 12.dp)
                         .width(panelWidth)
                         .heightIn(max = panelMaxHeight)
-                        .shadow(20.dp, shape)
-                        .border(
-                            BorderStroke(0.75.dp, Brush.verticalGradient(listOf(
-                                colors.onSurface.copy(alpha = 0.22f),
-                                colors.onSurface.copy(alpha = 0.06f),
-                                colors.onSurface.copy(alpha = 0.12f),
-                            ))),
-                            shape,
-                        ),
+                        .meloPopupPanel(shape, frost),
                     shape = shape,
-                    color = colors.surface,
+                    color = Color.Transparent,
+                    contentColor = meloMenuColors().label,
                 ) {
                     Column(
                         Modifier.fillMaxWidth()
@@ -379,7 +445,7 @@ private fun HomeDialSettingsOverlay(
                             )
                             OverlayPanelAction(
                                 label = stringResource(R.string.home_dial_reorder_pins),
-                                icon = { Icon(Icons.Rounded.SwapVert, contentDescription = null) },
+                                icon = { Icon(MeloIcons.SwapVert, contentDescription = null) },
                                 onClick = onReorderPinsClick,
                             )
                         }
@@ -406,8 +472,8 @@ private fun HomeAccountMenuOverlay(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-        SideEffect { dialogWindow?.setDimAmount(0f) }
+        val frost = rememberPopupFrost()
+        PopupWindowEffects(frost, 14.dp)
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val statusInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
             val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -419,7 +485,7 @@ private fun HomeAccountMenuOverlay(
             val noRipple = remember { MutableInteractionSource() }
             Box(
                 Modifier.matchParentSize()
-                    .background(colors.scrim.copy(alpha = MeloAlpha.Disabled))
+                    .background(`in`.melo.ui.glass.menuScrimColor())
                     .clickable(interactionSource = noRipple, indication = null, onClick = onDismiss),
             )
             AnimatedVisibility(
@@ -435,17 +501,10 @@ private fun HomeAccountMenuOverlay(
                     modifier = Modifier.padding(top = panelTop, end = 12.dp)
                         .width(panelWidth)
                         .heightIn(max = panelMaxHeight)
-                        .shadow(20.dp, shape)
-                        .border(
-                            BorderStroke(0.75.dp, Brush.verticalGradient(listOf(
-                                colors.onSurface.copy(alpha = 0.22f),
-                                colors.onSurface.copy(alpha = 0.06f),
-                                colors.onSurface.copy(alpha = 0.12f),
-                            ))),
-                            shape,
-                        ),
+                        .meloPopupPanel(shape, frost),
                     shape = shape,
-                    color = colors.surface,
+                    color = Color.Transparent,
+                    contentColor = meloMenuColors().label,
                 ) {
                     Column(
                         Modifier.fillMaxWidth()
@@ -457,46 +516,45 @@ private fun HomeAccountMenuOverlay(
                             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
                     ) {
                         Text(
-                            text = stringResource(R.string.home_account_menu_title),
-                            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 8.dp),
+                            text = stringResource(R.string.settings_accounts_title),
+                            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 6.dp)
+                                .semantics { heading() },
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        HomeAccountServiceRow(
+                        // One row shape for the accounts and the actions alike, as an iOS menu:
+                        // the same height, the same leading slot and the same text inset.
+                        AccountMenuRow(
                             title = stringResource(R.string.search_source_youtube),
                             detail = profileName?.let { name ->
                                 val handle = profileHandle?.takeIf(String::isNotBlank)
                                 if (handle == null) name else "$name · $handle"
-                            },
-                            connected = profileName != null,
-                            imageUrl = profileImageUrl,
-                            useYouTubeIcon = true,
+                            } ?: stringResource(if (profileName != null) R.string.home_account_connected else R.string.home_account_not_connected),
+                            leading = { AccountServiceMark(profileImageUrl.takeIf { profileName != null }, R.drawable.ic_source_youtube_music) },
+                            onClick = onManageAccountsClick,
                         )
-                        HomeAccountServiceRow(
+                        AccountMenuRow(
                             title = stringResource(R.string.search_source_spotify),
-                            detail = spotifyProfile?.displayName?.takeIf(String::isNotBlank),
-                            connected = spotifyConnected,
-                            imageUrl = spotifyProfile?.imageUrl,
-                            useYouTubeIcon = false,
-                        )
-                        HorizontalDivider(
-                            Modifier.padding(horizontal = 16.dp, vertical = MeloLayout.Space1),
-                            color = colors.onSurface.copy(alpha = MeloAlpha.Divider),
-                        )
-                        OverlayPanelAction(
-                            label = stringResource(R.string.home_account_manage),
-                            icon = { Icon(Icons.Rounded.AccountCircle, contentDescription = null) },
+                            detail = spotifyProfile?.displayName?.takeIf(String::isNotBlank)
+                                ?: stringResource(if (spotifyConnected) R.string.home_account_connected else R.string.home_account_not_connected),
+                            leading = { AccountServiceMark(spotifyProfile?.imageUrl.takeIf { spotifyConnected }, R.drawable.ic_source_spotify) },
                             onClick = onManageAccountsClick,
                         )
                         HorizontalDivider(
-                            Modifier.padding(horizontal = 16.dp, vertical = MeloLayout.Space1),
+                            Modifier.padding(start = 20.dp, end = 20.dp, top = MeloLayout.Space1, bottom = MeloLayout.Space1),
                             color = colors.onSurface.copy(alpha = MeloAlpha.Divider),
                         )
-                        OverlayPanelAction(
-                            label = stringResource(R.string.common_settings),
-                            icon = { Icon(painterResource(R.drawable.rounded_settings_24), contentDescription = null) },
+                        AccountMenuRow(
+                            title = stringResource(R.string.home_account_manage),
+                            leading = { Icon(MeloIcons.AccountCircle, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                            onClick = onManageAccountsClick,
+                        )
+                        AccountMenuRow(
+                            title = stringResource(R.string.common_settings),
+                            leading = { Icon(meloPainter(R.drawable.rounded_settings_24), contentDescription = null, modifier = Modifier.size(24.dp)) },
                             onClick = onSettingsClick,
                         )
+                        Spacer(Modifier.height(MeloLayout.Space2))
                     }
                 }
             }
@@ -504,44 +562,42 @@ private fun HomeAccountMenuOverlay(
     }
 }
 
+/**
+ * A row of the account menu: a [leading] mark in a 32dp slot, the title, and a quieter
+ * [detail] under it when there is one. Every row is the same height whatever it holds.
+ */
 @Composable
-private fun HomeAccountServiceRow(
-    title: String,
-    detail: String?,
-    connected: Boolean,
-    imageUrl: String? = null,
-    useYouTubeIcon: Boolean,
-) {
+private fun AccountMenuRow(title: String, leading: @Composable () -> Unit, onClick: () -> Unit, detail: String? = null) {
     Row(
-        Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 20.dp),
+        Modifier.fillMaxWidth().height(56.dp).clickable(onClick = onClick).padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        if (connected && !imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                modifier = Modifier.size(44.dp).clip(CircleShape),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                if (useYouTubeIcon) {
-                    Icon(painterResource(R.drawable.ic_source_youtube_music), null, modifier = Modifier.size(44.dp), tint = MaterialTheme.colorScheme.secondary)
-                } else {
-                    Icon(painterResource(R.drawable.ic_source_spotify), null, modifier = Modifier.size(44.dp), tint = MaterialTheme.colorScheme.secondary)
-                }
-            }
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(
-                text = detail ?: stringResource(if (connected) R.string.home_account_connected else R.string.home_account_not_connected),
+        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { leading() }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            if (detail != null) Text(
+                text = detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
         }
+    }
+}
+
+/** The account's picture when it has one, else the service's own mark, both 32dp round. */
+@Composable
+private fun AccountServiceMark(imageUrl: String?, serviceIcon: Int) {
+    if (!imageUrl.isNullOrBlank()) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = null,
+            modifier = Modifier.size(32.dp).clip(CircleShape),
+            contentScale = ContentScale.Crop,
+        )
+    } else {
+        Icon(meloPainter(serviceIcon), null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

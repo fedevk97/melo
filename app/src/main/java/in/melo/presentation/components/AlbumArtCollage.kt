@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,7 +20,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.request.ImageRequest
@@ -136,7 +136,7 @@ fun AlbumArtCollage(
         if (songs.isEmpty()) {
             Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
                 Icon(
-                    painter = painterResource(R.drawable.rounded_music_note_24),
+                    painter = meloPainter(R.drawable.rounded_music_note_24),
                     contentDescription = null,
                     modifier = Modifier.size(100.dp),
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = MeloAlpha.Disabled)

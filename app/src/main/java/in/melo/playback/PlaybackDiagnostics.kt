@@ -19,50 +19,21 @@ internal object PlaybackDiagnostics : AnalyticsListener {
     val decodedBytes = AtomicLong()
     val lastSignalAt = AtomicLong()
     val outputStarts = AtomicLong()
-    val encryptedSamples = AtomicLong()
-    val clearSamples = AtomicLong()
     @Volatile var lastError: String? = null
 
     private fun failure(kind: String, error: Exception) {
         val causes = generateSequence<Throwable>(error) { it.cause }.take(8).toList()
         val status = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
-        val nativeCode = causes.filterIsInstance<NativeAudioException>().firstOrNull()?.nativeCode
-        lastError = "$kind:${(error as? PlaybackException)?.errorCodeName.orEmpty()}:${causes.joinToString(">") { it.javaClass.simpleName }}:http=${status ?: 0}:native=${nativeCode ?: 0}"
+        lastError = "$kind:${(error as? PlaybackException)?.errorCodeName.orEmpty()}:${causes.joinToString(">") { it.javaClass.simpleName }}:http=${status ?: 0}"
         Log.w("MeloAudio", lastError!!)
         // Messages are Melo's own for these types; others may carry addresses.
-        val reason = causes.lastOrNull { it is NativeAudioException || it is `in`.melo.data.SpotifyFailure }?.message
+        val reason = causes.lastOrNull { it is `in`.melo.data.SpotifyFailure }?.message
         `in`.melo.data.diagnostics.DiagnosticLog.record("player", lastError + (reason?.let { " \"$it\"" } ?: ""))
     }
     override fun onPlayerError(eventTime: AnalyticsListener.EventTime, error: PlaybackException) = failure("player", error)
     override fun onAudioSinkError(eventTime: AnalyticsListener.EventTime, audioSinkError: Exception) = failure("sink", audioSinkError)
     override fun onAudioCodecError(eventTime: AnalyticsListener.EventTime, audioCodecError: Exception) = failure("codec", audioCodecError)
-    override fun onDrmSessionManagerError(eventTime: AnalyticsListener.EventTime, error: Exception) = failure("drm", error)
     override fun onAudioPositionAdvancing(eventTime: AnalyticsListener.EventTime, playoutStartSystemTimeMs: Long) { outputStarts.incrementAndGet() }
-}
-
-@UnstableApi
-internal class ExtractorProbe : androidx.media3.exoplayer.hls.HlsExtractorFactory by androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory() {
-    private val delegate = androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory()
-    override fun createExtractor(uri: android.net.Uri, format: androidx.media3.common.Format, captions: MutableList<androidx.media3.common.Format>?, adjuster: androidx.media3.common.util.TimestampAdjuster, headers: MutableMap<String, MutableList<String>>, input: androidx.media3.extractor.ExtractorInput, playerId: androidx.media3.exoplayer.analytics.PlayerId): androidx.media3.exoplayer.hls.HlsMediaChunkExtractor =
-        wrap(delegate.createExtractor(uri, format, captions, adjuster, headers, input, playerId))
-    private fun wrap(extractor: androidx.media3.exoplayer.hls.HlsMediaChunkExtractor): androidx.media3.exoplayer.hls.HlsMediaChunkExtractor = object : androidx.media3.exoplayer.hls.HlsMediaChunkExtractor by extractor {
-        override fun recreate() = wrap(extractor.recreate())
-        override fun init(output: androidx.media3.extractor.ExtractorOutput) {
-            extractor.init(object : androidx.media3.extractor.ExtractorOutput by output {
-                override fun track(id: Int, type: Int): androidx.media3.extractor.TrackOutput {
-                    val track = output.track(id, type)
-                    if(type != C.TRACK_TYPE_AUDIO) return track
-                    return object : androidx.media3.extractor.TrackOutput by track {
-                        override fun sampleMetadata(timeUs: Long, flags: Int, size: Int, offset: Int, cryptoData: androidx.media3.extractor.TrackOutput.CryptoData?) {
-                            if(flags and C.BUFFER_FLAG_ENCRYPTED != 0) PlaybackDiagnostics.encryptedSamples.incrementAndGet()
-                            else PlaybackDiagnostics.clearSamples.incrementAndGet()
-                            track.sampleMetadata(timeUs, flags, size, offset, cryptoData)
-                        }
-                    }
-                }
-            })
-        }
-    }
 }
 
 @UnstableApi

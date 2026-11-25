@@ -1,5 +1,7 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.presentation.components.SmartImageListTargetSize
 import `in`.melo.utils.formatSongCount
 import androidx.compose.animation.AnimatedContent
@@ -44,10 +46,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
@@ -84,9 +82,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import android.util.Log
-import androidx.compose.material.icons.rounded.DeleteForever
-import androidx.compose.material.icons.rounded.PlaylistPlay
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.WindowInsets
@@ -94,7 +89,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.Alignment
@@ -103,7 +97,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusModifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
 import kotlinx.collections.immutable.ImmutableList
@@ -144,52 +137,21 @@ import `in`.melo.ui.theme.MeloLayout
 
 @Composable
 fun SearchResultSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 4.dp)
-    )
+    `in`.melo.presentation.components.MeloSectionHeader(title, contentPadding = PaddingValues(horizontal = 4.dp))
 }
 
 @Composable
 fun EmptySearchResults(searchQuery: String, colorScheme: ColorScheme) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.Search,
-            contentDescription = stringResource(R.string.search_cd_no_results),
-            modifier = Modifier
-                .size(80.dp)
-                .padding(bottom = 16.dp),
-            tint = colorScheme.primary.copy(alpha = MeloAlpha.Tertiary)
-        )
-
-        Text(
-            text = if (searchQuery.isNotBlank()) {
-                stringResource(R.string.search_no_results_for_query, searchQuery)
-            } else {
-                stringResource(R.string.search_nothing_found)
-            },
-            style = MaterialTheme.typography.titleLarge,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = stringResource(R.string.search_try_different_or_filters),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = MeloAlpha.Secondary),
-            textAlign = TextAlign.Center
-        )
-    }
+    `in`.melo.presentation.components.MeloMessageState(
+        title = if (searchQuery.isNotBlank()) {
+            stringResource(R.string.search_no_results_for_query, searchQuery)
+        } else {
+            stringResource(R.string.search_nothing_found)
+        },
+        message = stringResource(R.string.search_try_different_or_filters),
+        icon = MeloIcons.Search,
+        modifier = Modifier.padding(top = MeloLayout.Space8),
+    )
 }
 
 @Composable
@@ -243,7 +205,7 @@ fun SearchResultArtistItem(
         onClick = onOpenClick,
         onPlayClick = onPlayClick,
         artist = true,
-        fallbackPainter = if (imageUrl == null) painterResource(R.drawable.rounded_artist_24) else null,
+        fallbackPainter = if (imageUrl == null) meloPainter(R.drawable.rounded_artist_24) else null,
         fallbackContentDescription = if (imageUrl == null) stringResource(R.string.common_artist) else null,
         playContainerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = MeloAlpha.Secondary),
         playContentColor = MaterialTheme.colorScheme.onTertiary,
@@ -296,35 +258,11 @@ fun SearchFilterChip(
         SearchFilterType.PLAYLISTS -> R.string.library_tab_playlists
     }
 
-    FilterChip(
+    `in`.melo.presentation.components.MeloChip(
+        label = stringResource(labelResId),
         selected = selected,
         onClick = { onSelect(filterType) },
-        label = { Text(stringResource(labelResId)) },
         modifier = modifier,
-        shape = MeloLayout.PillShape,
-        border = BorderStroke(
-            width = 0.75.dp,
-            color = if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant
-        ),
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-            selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ),
-         leadingIcon = if (selected) {
-             {
-                 Icon(
-                     painter = painterResource(R.drawable.rounded_check_circle_24),
-                     contentDescription = stringResource(R.string.common_selected),
-                     tint = MaterialTheme.colorScheme.onPrimary,
-                     modifier = Modifier.size(FilterChipDefaults.IconSize)
-                 )
-             }
-         } else {
-             null
-         }
     )
 }
 
@@ -339,7 +277,7 @@ fun SearchResultHistoryList(
 ) {
     Column {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -359,7 +297,7 @@ fun SearchResultHistoryList(
             items(items, key = { "history_${it.kind}_${it.id}" }, contentType = { "search_history" }) { item ->
                 Row(
                 modifier = Modifier.fillMaxWidth().clip(MeloLayout.CardShape)
-                        .clickable { onOpen(item) }.padding(horizontal = 8.dp, vertical = MeloLayout.Space2),
+                        .clickable { onOpen(item) }.padding(vertical = MeloLayout.Space2),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     `in`.melo.presentation.components.SmartImage(
@@ -392,7 +330,7 @@ fun SearchResultHistoryList(
                         }
                     }
                     IconButton(onClick = { onDelete(item) }) {
-                        Icon(Icons.Rounded.Close, stringResource(R.string.search_cd_delete_search_history_item),
+                        Icon(MeloIcons.Close, stringResource(R.string.search_cd_delete_search_history_item),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = MeloAlpha.Secondary))
                     }
                 }

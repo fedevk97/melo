@@ -34,6 +34,9 @@ internal class SpotifyRateLimited(message: String, val waitMs: Long) : SpotifyFa
 internal object BackgroundRequests : AbstractCoroutineContextElement(BackgroundRequestsKey)
 internal object BackgroundRequestsKey : CoroutineContext.Key<BackgroundRequests>
 
+/** Whether a failed status goes in the diagnostic report: only when the caller didn't expect it. */
+internal fun logsFailure(status: Int, expected: Set<Int>): Boolean = status !in expected
+
 internal class SpotifyTransport {
     private val client = OkHttpClient.Builder()
         .addInterceptor { chain ->
@@ -57,7 +60,11 @@ internal class SpotifyTransport {
         }
     }
 
-    suspend fun send(request: Request, operation: String): ByteArray {
+    /**
+     * [expected] are statuses the caller reads as an answer, such as a 404 for a track
+     * with no lyrics: they are still thrown, but not logged as failures.
+     */
+    suspend fun send(request: Request, operation: String, expected: Set<Int> = emptySet()): ByteArray {
         val background = coroutineContext[BackgroundRequestsKey] != null
         val host = request.url.host
         var limited = 0
@@ -71,7 +78,7 @@ internal class SpotifyTransport {
                 }
                 val wait = (limitedUntil[host] ?: 0) - SystemClock.elapsedRealtime()
                 if (wait > 0) delay(if (background) wait else minOf(wait, MAX_FOREGROUND_WAIT_MS))
-                try { return sendOnce(request, operation) }
+                try { return sendOnce(request, operation, expected) }
                 catch (failure: SpotifyRateLimited) {
                     limitedUntil.merge(host, SystemClock.elapsedRealtime() + failure.waitMs, ::maxOf)
                     DiagnosticLog.record("http", "rate-limited operation=\"$operation\" wait=${failure.waitMs / 1000}s background=$background")
@@ -81,7 +88,7 @@ internal class SpotifyTransport {
         } finally { if (!background) foreground.decrementAndGet() }
     }
 
-    private suspend fun sendOnce(request: Request, operation: String): ByteArray = suspendCancellableCoroutine { continuation ->
+    private suspend fun sendOnce(request: Request, operation: String, expected: Set<Int>): ByteArray = suspendCancellableCoroutine { continuation ->
         if (!NetworkMonitor.online.value) {
             continuation.resumeWithException(SpotifyFailure("$operation: connection unavailable."))
             return@suspendCancellableCoroutine
@@ -103,7 +110,9 @@ internal class SpotifyTransport {
                                 (seconds ?: DEFAULT_RETRY_AFTER_SECONDS).coerceIn(1, MAX_RETRY_AFTER_SECONDS) * 1000)
                         }
                         if (!response.isSuccessful) {
-                            DiagnosticLog.record("http", "status=${response.code} operation=\"$operation\"")
+                            if (logsFailure(response.code, expected)) {
+                                DiagnosticLog.record("http", "status=${response.code} operation=\"$operation\"")
+                            }
                             throw SpotifyFailure("$operation: HTTP response ${response.code}.", response.code)
                         }
                         val body = response.body ?: throw SpotifyFailure("$operation: empty response.")

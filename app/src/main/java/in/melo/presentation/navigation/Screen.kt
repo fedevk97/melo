@@ -17,6 +17,7 @@ sealed class Screen(val route: String) {
     object Equalizer : Screen("equalizer")
     object History : Screen("history")
     object GoogleSignIn : Screen("google_sign_in")
+    object DiscordLogin : Screen("discord_login")
     object Convert : Screen("convert/{playlistId}/{target}") {
         fun createRoute(playlistId: String, target: String) = "convert/${URLEncoder.encode(playlistId, "UTF-8")}/$target"
     }

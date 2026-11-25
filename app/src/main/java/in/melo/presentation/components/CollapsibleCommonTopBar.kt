@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
@@ -8,8 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -25,6 +24,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import `in`.melo.ui.theme.MeloStatusBarStyle
+import `in`.melo.ui.theme.controlFill
 import androidx.compose.ui.res.stringResource
 import `in`.melo.R
 
@@ -64,7 +64,8 @@ fun CollapsibleCommonTopBar(
     // Actually GenreDetailScreen uses: (collapseFraction * 2f).coerceIn(0f, 1f)
     val solidAlpha = (collapseFraction * 2f).coerceIn(0f, 1f)
     
-    val backgroundColor = containerColor ?: MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = solidAlpha)
+    val material = barMaterialColor()
+    val backgroundColor = containerColor ?: material.copy(alpha = material.alpha * solidAlpha)
     val statusBarFallbackColor = backgroundColor.compositeOver(MaterialTheme.colorScheme.surface)
 
     if (syncStatusBarWithContainer) {
@@ -119,12 +120,12 @@ fun CollapsibleCommonTopBar(
                     .zIndex(1f),
                 onClick = onBackClick,
                 colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    containerColor = MaterialTheme.colorScheme.controlFill,
                     contentColor = MaterialTheme.colorScheme.onSurface 
                 )
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    imageVector = MeloIcons.ArrowBack,
                     contentDescription = stringResource(R.string.common_back)
                 )
             }

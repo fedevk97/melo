@@ -1,5 +1,7 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import android.widget.Toast
 import `in`.melo.data.model.Song
@@ -9,6 +11,8 @@ import androidx.activity.compose.BackHandler
 import `in`.melo.presentation.components.scoped.LyricsPredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.layout.ContentScale
 import `in`.melo.presentation.components.SmartImage
@@ -50,22 +54,16 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ClearAll
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -73,7 +71,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -261,19 +258,25 @@ fun LyricsSheet(
     swipeThreshold: Dp = 100.dp,
     highlightZoneFraction: Float = 0.08f, // Reduced from 0.22 for less padding
     highlightOffsetDp: Dp = 32.dp,
-    autoscrollAnimationSpec: AnimationSpec<Float>? = null // null = auto-detect from preference
+    autoscrollAnimationSpec: AnimationSpec<Float>? = null, // null = auto-detect from preference
+    /** The player's artwork backdrop; when given, the lyrics sit on it in white with glass controls. */
+    backdrop: (@Composable (Modifier) -> Unit)? = null,
+    /** Slides itself in; off when the player's own fold into the header brings it in. */
+    animateIn: Boolean = true,
+    /** Takes back presses; off while it is on its way out. */
+    interactive: Boolean = true,
 ) {
     // ─── Enter / Exit animation state ────────────────────────────────────────
     // Mirrors the player-sheet pattern: a plain Float in state drives graphicsLayer
     // at draw-phase (no recomposition per frame). 0f = fully visible, 1f = dismissed.
-    var backProgress by remember { mutableFloatStateOf(1f) }
+    var backProgress by remember { mutableFloatStateOf(if (animateIn) 1f else 0f) }
 
     // Draw-phase lambda provider — read only inside graphicsLayer so layout is never
     // re-triggered during the gesture (same technique as SheetVisualState).
     val backProgressProvider = rememberUpdatedState(backProgress)
 
     // Enter animation: slide up from +6 % height + fade in.
-    LaunchedEffect(Unit) {
+    if (animateIn) LaunchedEffect(Unit) {
         val anim = Animatable(1f)
         anim.animateTo(
             targetValue = 0f,
@@ -286,22 +289,26 @@ fun LyricsSheet(
 
     // Predictive-back (Android 13+) or plain back on older devices.
     LyricsPredictiveBackHandler(
-        enabled = true,
+        enabled = interactive,
+        commitImmediately = !animateIn,
         onProgressChanged = { backProgress = it },
         onBack = onBackClick
     )
 
     val stablePlayerState by stablePlayerStateFlow.collectAsStateWithLifecycle()
     val sheetColors = remember(colorScheme) { lyricsSheetColors(colorScheme) }
-    val backgroundColor = sheetColors.controlContainer
-    val onBackgroundColor = sheetColors.controlContent
+    val onArtwork = backdrop != null
+    val backgroundColor = if (onArtwork) Color.White.copy(alpha = 0.14f) else sheetColors.controlContainer
+    val onBackgroundColor = if (onArtwork) Color.White else sheetColors.controlContent
     val containerColor = sheetColors.container
-    val contentColor = sheetColors.content
-    val accentColor = sheetColors.accent
-    val onAccentColor = sheetColors.accentContent
+    val contentColor = if (onArtwork) Color.White else sheetColors.content
+    val accentColor = if (onArtwork) Color.White else sheetColors.accent
+    val onAccentColor = if (onArtwork) Color(0xFF101010) else sheetColors.accentContent
+    val reducedMotion = `in`.melo.presentation.utils.LocalReducedMotion.current
     val lyricHighlightColor = sheetColors.lyricHighlight
-    val playPauseColor = sheetColors.playPauseContainer
-    val onPlayPauseColor = sheetColors.playPauseContent
+    val playPauseColor = if (onArtwork) Color.White else sheetColors.playPauseContainer
+    val onPlayPauseColor = if (onArtwork) Color(0xFF101010) else sheetColors.playPauseContent
+    val chromeDark = onArtwork || containerColor.luminance() < 0.5f
 
     val isLoadingLyrics by remember(stablePlayerState) { derivedStateOf { stablePlayerState.isLoadingLyrics } }
     val lyrics by remember(stablePlayerState) { derivedStateOf { stablePlayerState.lyrics } }
@@ -460,6 +467,8 @@ fun LyricsSheet(
 
     // Immersive Mode State
     var immersiveMode by remember { mutableStateOf(false) }
+    // Lines are being picked to share; the pick bar takes the bottom of the screen.
+    var pickingLines by remember { mutableStateOf(false) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showMoreSheet by remember { mutableStateOf(false) }
     val moreSheetState = rememberModalBottomSheetState(
@@ -506,14 +515,23 @@ fun LyricsSheet(
 
     // Font Scaling
     val fontScale by animateFloatAsState(
-        targetValue = if (immersiveMode) 1.4f else 1f,
+        targetValue = if (immersiveMode) 1.1f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "fontScale"
     )
     
-    val scaledTextStyle = lyricsTextStyle.copy(
-        fontSize = lyricsTextStyle.fontSize * fontScale,
-        lineHeight = lyricsTextStyle.lineHeight * fontScale
+    // Large, heavy lines: the lyrics are the screen, not a caption on it.
+    val syncedTextStyle = lyricsTextStyle.copy(
+        fontSize = 34.sp * fontScale,
+        lineHeight = 41.sp * fontScale,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.3).sp,
+    )
+    val plainTextStyle = lyricsTextStyle.copy(
+        fontSize = 30.sp,
+        lineHeight = 38.sp,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.3).sp,
     )
 
     fun resetImmersiveTimer() {
@@ -562,7 +580,7 @@ fun LyricsSheet(
         val hasSynced = !lyrics?.synced.isNullOrEmpty()
         val hasPlain = !lyrics?.plain.isNullOrEmpty()
         
-        AlertDialog(
+        MeloAlertDialog(
             onDismissRequest = { showSaveLyricsDialog = false },
             title = { Text(stringResource(R.string.lyrics_save_dialog_title)) },
             text = {
@@ -681,11 +699,12 @@ fun LyricsSheet(
                     }
                 )
             },
-        containerColor = containerColor,
+        containerColor = if (onArtwork) Color.Black else containerColor,
         contentColor = contentColor,
         // Removed TopBar and FAB
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
+            backdrop?.invoke(Modifier.fillMaxSize())
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -708,52 +727,54 @@ fun LyricsSheet(
             )
             val staticListState = rememberLazyListState()
 
-            // Lyrics Content (Weight 1)
+            // The lines as shown, for choosing a passage to share.
+            val pickableLines = remember(lyrics, showSyncedLyrics, showLyricsTranslation, showLyricsRomanization, hasTranslatedLyrics, hasRomanizedLyrics) {
+                pickableLyricLines(
+                    lyrics = lyrics,
+                    synced = showSyncedLyrics == true,
+                    showTranslation = showLyricsTranslation,
+                    showRomanization = showLyricsRomanization,
+                    hasTranslated = hasTranslatedLyrics,
+                    hasRomanized = hasRomanizedLyrics,
+                )
+            }
+            var shareRequest by remember { mutableStateOf<LyricsShareRequest?>(null) }
+            val picker = rememberLyricsPicker(currentSong, pickableLines, lyricsSyncOffset.toLong()) { shareRequest = it }
+            BackHandler(enabled = picker.picking) { picker.cancel() }
+            LaunchedEffect(picker.picking) { pickingLines = picker.picking }
+
+            // Lyrics Content (Weight 1). With the controls away, a tap in the lower half brings
+            // them back; the upper lines still seek, and a drag still scrolls.
+            val showControlsLabel = stringResource(R.string.lyrics_show_controls)
+            val hiddenControls = immersiveMode && !picker.picking
             Box(
                 modifier = Modifier
                     .align(Alignment.Start)
                     .weight(1f)
                     .fillMaxWidth()
+                    .revealLyricsControlsOnTap(enabled = hiddenControls, onReveal = { resetImmersiveTimer() })
+                    .semantics {
+                        if (hiddenControls) {
+                            customActions = listOf(CustomAccessibilityAction(showControlsLabel) { resetImmersiveTimer(); true })
+                        }
+                    }
             ) {
-                // Track Info Header (Fixed at top)
-                AnimatedContent(
-                    targetState = currentSong,
-                    transitionSpec = {
-                        (fadeIn(animationSpec = tween(300)) + 
-                         scaleIn(initialScale = 0.9f, animationSpec = tween(300)))
-                        .togetherWith(fadeOut(animationSpec = tween(300)))
-                    },
+                // Now-playing header, fixed at the top
+                LyricsHeader(
+                    song = currentSong,
+                    ink = contentColor,
+                    dark = chromeDark,
+                    isPlaying = isPlaying,
+                    onOpenPlayer = onBackClick,
+                    onMoreClick = { showMoreSheet = true },
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .zIndex(2f)
-                        .fillMaxWidth(),
-                    label = "headerAnimation"
-                ) { song ->
-                    LyricsTrackInfo(
-                        song = song,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .widthIn(max = 340.dp)
-                            .wrapContentWidth()
-                            .padding(
-                                top = 4.dp, bottom = 24.dp, start = MeloLayout.Space4, end = MeloLayout.Space4
-                            )
-                            .background(
-                                color = backgroundColor,
-                                shape = CircleShape
-                            )
-                            .animateContentSize() // Animate width changes
-                            .clip(CircleShape)
-                            .clickable(
-                                onClickLabel = stringResource(R.string.lyrics_return_to_player),
-                                role = androidx.compose.ui.semantics.Role.Button,
-                                onClick = onBackClick,
-                            ),
-                        backgroundColor = backgroundColor, // Distinct solid background
-                        contentColor = onBackgroundColor,
-                        isPlaying = isPlaying
-                    )
-                }
+                        .zIndex(2f),
+                    onShareClick = if (pickableLines.isEmpty() || showSyncedLyrics == null) null else {
+                        { if (picker.picking) picker.cancel() else picker.beginPicking() }
+                    },
+                    picking = picker.picking,
+                )
 
                 when (showSyncedLyrics) {
                     null -> {
@@ -791,15 +812,19 @@ fun LyricsSheet(
                             SyncedLyricsList(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 24.dp),
-                                contentPadding = PaddingValues(top = 130.dp, bottom = 100.dp),
+                                    .padding(top = 66.dp)
+                                    .clipToBounds()
+                                    .lyricsEdgeFade(top = 72.dp, bottom = 80.dp)
+                                    .padding(horizontal = 14.dp),
+                                contentPadding = PaddingValues(top = 72.dp, bottom = 100.dp),
                                 lines = synced,
                                 listState = syncedListState,
                                 playbackPositionFlow = playbackPositionFlow,
                                 lyricsSyncOffset = lyricsSyncOffset,
                                 positionOverrideMs = previewSeekPositionMs,
-                                accentColor = lyricHighlightColor,
-                                textStyle = scaledTextStyle,
+                                isPlaying = isPlaying,
+                                ink = contentColor,
+                                textStyle = syncedTextStyle,
                                 onLineClick = { syncedLine -> 
                                     onSeekTo(
                                         resolveSeekPositionMs(
@@ -809,16 +834,17 @@ fun LyricsSheet(
                                     )
                                     resetImmersiveTimer()
                                 },
-                                highlightZoneFraction = highlightZoneFraction,
-                                highlightOffsetDp = highlightOffsetDp,
-                                autoscrollAnimationSpec = resolvedAutoscrollSpec,
-                                useAnimatedLyrics = useAnimatedLyrics,
-                                animatedLyricsBlurEnabled = animatedLyricsBlurEnabled && !disableBlurAllOver,
-                                animatedLyricsBlurStrength = animatedLyricsBlurStrength,
-                                immersiveMode = immersiveMode,
+                                highlightOffsetFraction = 0.08f,
+                                blurEnabled = animatedLyricsBlurEnabled && !disableBlurAllOver,
+                                blurStrength = animatedLyricsBlurStrength,
+                                reducedMotion = reducedMotion,
                                 lyricsAlignment = lyricsAlignment,
                                 showTranslation = showLyricsTranslation,
                                 showRomanization = showLyricsRomanization,
+                                picks = picker.picks,
+                                picking = picker.picking,
+                                onLineLongPress = { picker.pick(it) },
+                                onLineToggle = { picker.toggle(it) },
                                 footer = {
                                     if (lyrics?.areFromRemote == true) {
                                         item(key = "provider_text") {
@@ -841,26 +867,35 @@ fun LyricsSheet(
                     false -> {
                         lyrics?.plain?.let { plain ->
                             LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize().padding(top = 66.dp).clipToBounds().lyricsEdgeFade(top = 56.dp, bottom = 80.dp),
                                 state = staticListState,
                                 contentPadding = PaddingValues(
                                     start = 24.dp,
                                     end = 24.dp,
-                                    top = 130.dp,
+                                    top = 56.dp,
                                     bottom = 24.dp
                                 )
                             ) {
                                 itemsIndexed(
                                     items = plain,
                                     key = { index, line -> "$index-$line" }
-                                ) { _, line ->
+                                ) { index, line ->
+                                    val picked = picker.picking && index in picker.picks
                                     PlainLyricsLine(
                                         line = line,
-                                        style = lyricsTextStyle,
+                                        style = plainTextStyle,
                                         lyricsAlignment = lyricsAlignment,
                                         showTranslation = if (hasTranslatedLyrics) showLyricsTranslation else true,
                                         showRomanization = if (hasRomanizedLyrics) showLyricsRomanization else true,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(contentColor.copy(alpha = if (picked) 0.14f else 0f))
+                                            .combinedClickable(
+                                                onClick = { if (picker.picking) picker.toggle(index) },
+                                                onLongClick = { picker.pick(index) },
+                                            )
+                                            .graphicsLayer { alpha = if (picker.picking && !picked) 0.45f else 1f }
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                 }
@@ -868,32 +903,23 @@ fun LyricsSheet(
                         }
                     }
                 }
-                
-                // Top Gradient for fade
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(130.dp)
-                        .align(Alignment.TopCenter)
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(containerColor, Color.Transparent)
-                            )
-                        )
-                )
 
-                // Bottom Gradient for fade
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, containerColor)
-                            )
-                        )
-                )
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = picker.picking,
+                    enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+                    exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
+                    modifier = Modifier.align(Alignment.BottomCenter).zIndex(3f),
+                ) {
+                    LyricsPickBar(
+                        shareEnabled = picker.picks.isNotEmpty(),
+                        dark = chromeDark,
+                        onCancel = picker.cancel,
+                        onShare = picker.share,
+                    )
+                }
+                shareRequest?.let { request ->
+                    LyricsShareSheet(request = request, onDismiss = { shareRequest = null })
+                }
             }
 
             // Controls Section (Auto-hide in immersive mode)
@@ -905,7 +931,7 @@ fun LyricsSheet(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(containerColor)
+                        .then(if (onArtwork) Modifier else Modifier.background(containerColor))
                         .padding(bottom = paddingValues.calculateBottomPadding() + 10.dp, end = 16.dp, start = 16.dp)
                         .pointerInput(Unit) {
                             awaitPointerEventScope {
@@ -937,98 +963,82 @@ fun LyricsSheet(
                     )
                 }
 
-                // Playback Controls Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 0.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // Play/Pause Button (Smaller)
-                    val playPauseCornerRadius by animateDpAsState(
-                        targetValue = if (showPause) 18.dp else 50.dp,
-                        animationSpec = spring(stiffness = Spring.StiffnessLow),
-                        label = "playPauseShape"
-                    )
+                LyricsScrubber(
+                    playbackPositionFlow = playbackPositionFlow,
+                    totalDuration = stablePlayerState.totalDuration,
+                    ink = contentColor,
+                    isPlaying = isPlaying,
+                    onSeekTo = onSeekTo,
+                    onSeekPreviewChange = { previewSeekPositionMs = it },
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
 
-                    Box(
-                        modifier = Modifier
-                            .size(78.dp)
-                            .clip(RoundedCornerShape(playPauseCornerRadius))
-                            .background(playPauseColor)
-                            .clickable {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onPlayPause()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isBuffering) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(32.dp),
-                                color = onPlayPauseColor,
-                                strokeWidth = 3.dp,
-                            )
-                        } else AnimatedContent(
-                            targetState = showPause,
-                            label = "playPauseIconAnimation"
-                        ) { playing ->
-                            if (playing) {
-                                Icon(
-                                    modifier = Modifier.size(32.dp),
-                                    imageVector = Icons.Rounded.Pause,
-                                    contentDescription = stringResource(R.string.melo_pause),
-                                    tint = onPlayPauseColor
+                LyricsTransport(
+                    showPause = showPause,
+                    isBuffering = isBuffering,
+                    ink = contentColor,
+                    onPrevious = {
+                        resetImmersiveTimer()
+                        onPrev()
+                    },
+                    onPlayPause = {
+                        resetImmersiveTimer()
+                        onPlayPause()
+                    },
+                    onNext = {
+                        resetImmersiveTimer()
+                        onNext()
+                    },
+                    modifier = Modifier.padding(vertical = 6.dp),
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Back to the player, and the synced / static switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    LyricsGlassButton(
+                        icon = MeloIcons.ArrowBack,
+                        contentDescription = stringResource(R.string.common_back),
+                        ink = contentColor,
+                        dark = chromeDark,
+                        onClick = onBackClick,
+                        size = 44.dp,
+                        extraScale = { lerp(1f, 0.7f, backProgressProvider.value) },
+                    )
+                    val currentMode = showSyncedLyrics
+                    if (currentMode != null) {
+                        MaterialTheme(
+                            colorScheme = if (onArtwork) {
+                                colorScheme.copy(
+                                    background = Color.Black,
+                                    onSurfaceVariant = Color.White.copy(alpha = 0.82f),
                                 )
                             } else {
-                                Icon(
-                                    modifier = Modifier.size(32.dp),
-                                    imageVector = Icons.Rounded.PlayArrow,
-                                    contentDescription = stringResource(R.string.common_play),
-                                    tint = onPlayPauseColor
-                                )
-                            }
+                                colorScheme
+                            },
+                        ) {
+                            `in`.melo.ui.glass.MeloSegmentedControl(
+                                options = listOf(
+                                    stringResource(R.string.lyrics_mode_synced),
+                                    stringResource(R.string.lyrics_mode_static),
+                                ),
+                                selectedIndex = if (currentMode) 0 else 1,
+                                onSelect = { index ->
+                                    resetImmersiveTimer()
+                                    val synced = index == 0
+                                    showSyncedLyrics = synced
+                                    onLyricsModeChanged(synced)
+                                },
+                                optionEnabled = { index -> index != 0 || hasSyncedLyrics },
+                                modifier = Modifier.weight(1f),
+                            )
                         }
                     }
-
-                    // Progress Bar
-                    LyricsPlaybackSeekBar(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        playbackPositionFlow = playbackPositionFlow,
-                        backgroundColor = backgroundColor,
-                        onBackgroundColor = onBackgroundColor,
-                        accentColor = accentColor,
-                        totalDuration = stablePlayerState.totalDuration,
-                        onSeekTo = onSeekTo,
-                        onSeekPreviewChange = { previewSeekPositionMs = it },
-                        isPlaying = isPlaying
-                    )
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Floating Toolbar
-                LyricsFloatingToolbar(
-                    modifier = Modifier.padding(horizontal = 0.dp),
-                    showSyncedLyrics = showSyncedLyrics,
-                    hasSyncedLyrics = hasSyncedLyrics,
-                    onShowSyncedLyricsChange = {
-                        showSyncedLyrics = it
-                        onLyricsModeChanged(it)
-                    },
-                    onNavigateBack = {
-                        onBackClick()
-                    },
-                    onMoreClick = { showMoreSheet = true },
-                    backgroundColor = backgroundColor,
-                    onBackgroundColor = onBackgroundColor,
-                    accentColor = accentColor,
-                    onAccentColor = onAccentColor,
-                    // Pass progress so the back button animates with the gesture (draw-phase).
-                    backProgressProvider = { backProgressProvider.value },
-                )
              }
             }
         }
@@ -1117,35 +1127,12 @@ fun LyricsSheet(
             }
         }
 
-       // Show Controls Button (Overlay)
-       AnimatedVisibility(
-            visible = immersiveMode,
-            enter = fadeIn() + slideInVertically { it / 2 },
-            exit = fadeOut() + slideOutVertically { it / 2 },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
-        ) {
-            FilledIconButton(
-                onClick = { resetImmersiveTimer() },
-                modifier = Modifier.size(48.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = accentColor,
-                    contentColor = onAccentColor
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.KeyboardArrowUp,
-                    contentDescription = "Show Controls"
-                )
-            }
-        }
        
        // Swipe Feedback Overlay
        if (isSwipeActive || swipeProgress.value > 0f) {
            val isNext = dragOffset < 0
            val overlayAlignment = if (isNext) Alignment.CenterEnd else Alignment.CenterStart
-           val icon = if (isNext) Icons.Rounded.SkipNext else Icons.Rounded.SkipPrevious
+           val icon = if (isNext) MeloIcons.SkipNext else MeloIcons.SkipPrevious
            
            Box(
                modifier = Modifier
@@ -1187,565 +1174,53 @@ fun LyricsSheet(
     }
 }
 
-@Composable
-private fun LyricsPlaybackSeekBar(
-    playbackPositionFlow: StateFlow<Long>,
-    backgroundColor: Color,
-    onBackgroundColor: Color,
-    accentColor: Color,
-    totalDuration: Long,
-    onSeekTo: (Long) -> Unit,
-    onSeekPreviewChange: (Long?) -> Unit,
-    isPlaying: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val playbackPosition by playbackPositionFlow.collectAsStateWithLifecycle()
-
-    PlayerSeekBar(
-        backgroundColor = backgroundColor,
-        onBackgroundColor = onBackgroundColor,
-        primaryColor = accentColor,
-        currentPosition = playbackPosition,
-        totalDuration = totalDuration,
-        onSeek = onSeekTo,
-        onSeekPreview = onSeekPreviewChange,
-        isPlaying = isPlaying,
-        modifier = modifier
-    )
+/** A plain lyrics entry's words, its romanization and its translation ("" when absent). */
+internal fun splitPlainLyric(line: String): Triple<String, String, String> {
+    val parts = line.split("\n")
+    val primary = parts.firstOrNull()?.let(::sanitizeLyricLineText).orEmpty()
+    if (parts.size < 2) return Triple(primary, "", "")
+    val firstExtra = parts[1]
+    val isFirstRomanization = MultiLangRomanizer.isScriptThatNeedsRomanization(primary) &&
+        firstExtra.any { it.code in 32..126 }
+    val romanization = if (isFirstRomanization) sanitizeLyricLineText(firstExtra) else ""
+    val translation = if (isFirstRomanization) parts.drop(2).joinToString("\n") { sanitizeLyricLineText(it) }
+    else parts.drop(1).joinToString("\n") { sanitizeLyricLineText(it) }
+    return Triple(primary, romanization, translation)
 }
 
-@OptIn(ExperimentalSnapperApi::class)
-@Composable
-fun SyncedLyricsList(
-    lines: List<SyncedLine>,
-    listState: LazyListState,
-    playbackPositionFlow: StateFlow<Long>,
-    lyricsSyncOffset: Int,
-    positionOverrideMs: Long? = null,
-    accentColor: Color,
-    textStyle: TextStyle,
-    onLineClick: (SyncedLine) -> Unit,
-    highlightZoneFraction: Float,
-    highlightOffsetDp: Dp,
-    autoscrollAnimationSpec: AnimationSpec<Float>,
-    useAnimatedLyrics: Boolean = false,
-    animatedLyricsBlurEnabled: Boolean = true,
-    animatedLyricsBlurStrength: Float = 2.5f,
-    immersiveMode: Boolean = false,
-    lyricsAlignment: String = "left",
-    showTranslation: Boolean = true,
-    showRomanization: Boolean = true,
-    modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
-    footer: LazyListScope.() -> Unit = {}
-) {
-    val density = LocalDensity.current
-    val playbackPosition by playbackPositionFlow.collectAsStateWithLifecycle()
-    val position = remember(playbackPosition, lyricsSyncOffset, positionOverrideMs) {
-        positionOverrideMs ?: (playbackPosition + lyricsSyncOffset).coerceAtLeast(0L)
-    }
-    val isPreviewSeeking = positionOverrideMs != null
-    val currentLineIndex by remember(position, lines) {
-        derivedStateOf {
-            resolveCurrentLineIndex(lines = lines, position = position)
-        }
-    }
-    var hasAlignedInitialLine by remember(lines) { mutableStateOf(false) }
-    var lastAutoScrolledLineIndex by remember(lines) { mutableIntStateOf(-1) }
-
-    BoxWithConstraints(modifier = modifier) {
-        val metrics = remember(maxHeight, highlightZoneFraction, highlightOffsetDp) {
-            calculateHighlightMetrics(maxHeight, highlightZoneFraction, highlightOffsetDp)
-        }
-        val highlightOffsetPx = remember(highlightOffsetDp, density) { with(density) { highlightOffsetDp.toPx() } }
-
-        val snapperLayoutInfo = rememberLazyListSnapperLayoutInfo(
-            lazyListState = listState,
-            snapOffsetForItem = { layoutInfo, item ->
-                val viewportHeight = layoutInfo.endScrollOffset - layoutInfo.startScrollOffset
-                highlightSnapOffsetPx(viewportHeight, item.size, highlightOffsetPx)
-            }
-        )
-        val flingBehavior = rememberSnapperFlingBehavior(layoutInfo = snapperLayoutInfo)
-
-        LaunchedEffect(currentLineIndex, lines.size, metrics, isPreviewSeeking) {
-            if (lines.isEmpty()) return@LaunchedEffect
-            if (currentLineIndex !in lines.indices) return@LaunchedEffect
-            if (listState.layoutInfo.totalItemsCount == 0) return@LaunchedEffect
-
-            if (!hasAlignedInitialLine) {
-                listState.scrollToItem(currentLineIndex)
-                snapToSnapIndex(
-                    listState = listState,
-                    layoutInfo = snapperLayoutInfo,
-                    targetIndex = currentLineIndex
-                )
-                hasAlignedInitialLine = true
-                lastAutoScrolledLineIndex = currentLineIndex
-                return@LaunchedEffect
-            }
-
-            if (listState.isScrollInProgress && !isPreviewSeeking) return@LaunchedEffect
-
-            val lineJumpDistance = if (lastAutoScrolledLineIndex >= 0) {
-                abs(currentLineIndex - lastAutoScrolledLineIndex)
-            } else {
-                0
-            }
-
-            if (isPreviewSeeking) {
-                if (lineJumpDistance > 2) {
-                    listState.scrollToItem(currentLineIndex)
-                    snapToSnapIndex(
-                        listState = listState,
-                        layoutInfo = snapperLayoutInfo,
-                        targetIndex = currentLineIndex
-                    )
-                } else {
-                    animateToSnapIndex(
-                        listState = listState,
-                        layoutInfo = snapperLayoutInfo,
-                        targetIndex = currentLineIndex,
-                        animationSpec = tween(durationMillis = 110, easing = FastOutSlowInEasing)
-                    )
-                }
-                lastAutoScrolledLineIndex = currentLineIndex
-                return@LaunchedEffect
-            }
-
-            // Music Style Dynamic Velocity
-            val dynamicAnimationSpec = if (useAnimatedLyrics) {
-                val currentLineTime = lines.getOrNull(currentLineIndex)?.time ?: 0
-                val nextLineTime = lines.getOrNull(currentLineIndex + 1)?.time ?: (currentLineTime + 1000)
-                val timeDiff = (nextLineTime - currentLineTime).coerceIn(250, 2000) // Bound the duration
-                
-                tween<Float>(
-                    durationMillis = timeDiff,
-                    easing = FastOutSlowInEasing
-                )
-            } else {
-                autoscrollAnimationSpec
-            }
-
-            animateToSnapIndex(
-                listState = listState,
-                layoutInfo = snapperLayoutInfo,
-                targetIndex = currentLineIndex,
-                animationSpec = dynamicAnimationSpec
+/**
+ * The lines the lyrics screen shows, each with the smaller line under it, ready to be picked for a
+ * share card. Synced lines carry their sweep, so the video lights them as the screen does.
+ */
+internal fun pickableLyricLines(
+    lyrics: `in`.melo.data.model.Lyrics?,
+    synced: Boolean,
+    showTranslation: Boolean,
+    showRomanization: Boolean,
+    hasTranslated: Boolean,
+    hasRomanized: Boolean,
+): List<PickableLine> {
+    if (lyrics == null) return emptyList()
+    if (synced) {
+        val lines = lyrics.synced ?: return emptyList()
+        return lines.mapIndexed { i, line ->
+            val sub = line.romanization?.takeIf { showRomanization && it.isNotBlank() }
+                ?: line.translation?.takeIf { showTranslation && it.isNotBlank() }
+            PickableLine(
+                text = sanitizeLyricLineText(line.line),
+                subText = sub,
+                timing = SweptLine.of(line, lines.getOrNull(i + 1)?.time ?: Int.MAX_VALUE),
             )
-            lastAutoScrolledLineIndex = currentLineIndex
-        }
-
-        Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                state = listState,
-                flingBehavior = flingBehavior,
-                contentPadding = contentPadding
-            ) {
-                itemsIndexed(
-                    items = lines,
-                    key = { index, item -> "${item.time}_$index" }
-                ) { index, line ->
-                    val nextTime = lines.getOrNull(index + 1)?.time ?: Int.MAX_VALUE
-                    val distanceFromCurrent = if (currentLineIndex != -1) abs(currentLineIndex - index) else 100
-                    
-                    val parallaxModifier = if (useAnimatedLyrics) {
-                        Modifier.graphicsLayer {
-                            // Calculate translation dynamically inside graphicsLayer to avoid recomposing the row during scroll
-                            val currentLayoutInfo = listState.layoutInfo
-                            val lineItemInfo = currentLayoutInfo.visibleItemsInfo.find { it.index == index }
-                            val itemCenter = lineItemInfo?.let { it.offset + (it.size / 2f) }
-                            val viewportCenter = currentLayoutInfo.viewportEndOffset / 2f
-                            
-                            val distanceFromCenter = itemCenter?.let { it - viewportCenter } ?: 0f
-                            
-                            val maxTranslation = 40f 
-                            val distanceRatio = (distanceFromCenter / viewportCenter).coerceIn(-1f, 1f)
-                            translationY = distanceRatio * distanceRatio * distanceRatio * maxTranslation 
-                        }
-                    } else Modifier
-
-                    if (line.line.isNotBlank()) {
-                        LyricLineRow(
-                            line = line,
-                            nextTime = nextTime,
-                            position = position,
-                            distanceFromCurrent = distanceFromCurrent,
-                            useAnimatedLyrics = useAnimatedLyrics,
-                            animatedLyricsBlurEnabled = animatedLyricsBlurEnabled,
-                            animatedLyricsBlurStrength = animatedLyricsBlurStrength,
-                            immersiveMode = immersiveMode,
-                            lyricsAlignment = lyricsAlignment,
-                            showTranslation = showTranslation,
-                            showRomanization = showRomanization,
-                            accentColor = accentColor,
-                            style = textStyle,
-                            modifier = parallaxModifier
-                                .fillMaxWidth()
-                                .testTag("synced_line_${line.time}"),
-                            onClick = { onLineClick(line) }
-                        )
-                    } else {
-                        BubblesLine(
-                            positionFlow = playbackPositionFlow,
-                            time = line.time,
-                            color = LocalContentColor.current.copy(alpha = MeloAlpha.Scrim),
-                            nextTime = nextTime,
-                            modifier = parallaxModifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                        )
-                    }
-// 16 dp Spacer removed to allow dynamic padding in LyricLineRow
-                }
-                footer()
-            }
-
-//            if (metrics.zoneHeight > 0.dp) {
-//                Box(
-//                    modifier = Modifier
-//                        .fillMaxWidth()
-//                        .offset(y = metrics.topPadding)
-//                        .height(metrics.zoneHeight)
-//                        .align(Alignment.TopCenter)
-//                        .clip(MeloLayout.PanelShape)
-//                        .background(accentColor.copy(alpha = 0.12f))
-//                        .testTag("synced_highlight_zone")
-//                )
-//            }
         }
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun LyricLineRow(
-    line: SyncedLine,
-    nextTime: Int,
-    position: Long,
-    distanceFromCurrent: Int = 100,
-    useAnimatedLyrics: Boolean = false,
-    animatedLyricsBlurEnabled: Boolean = true,
-    animatedLyricsBlurStrength: Float = 2.5f,
-    immersiveMode: Boolean = false,
-    lyricsAlignment: String = "left",
-    showTranslation: Boolean = true,
-    showRomanization: Boolean = true,
-    accentColor: Color,
-    style: TextStyle,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val sanitizedLine = remember(line.line) { sanitizeLyricLineText(line.line) }
-    val sanitizedWords = remember(line.words) {
-        line.words?.let(::sanitizeSyncedWords)
-    }
-    val sanitizedWordClusters = remember(sanitizedWords) {
-        sanitizedWords?.takeIf { it.isNotEmpty() }?.let(::clusterSyncedWords)
-    }
-    val lineEndTime = remember(line, nextTime) {
-        resolveLineEndTimeMs(line, nextTime)
-    }
-    val isCurrentLine by remember(position, line.time, lineEndTime) {
-        derivedStateOf { position in line.time.toLong()..<lineEndTime }
-    }
-    val unhighlightedColor = LocalContentColor.current.copy(alpha = MeloAlpha.Disabled)
-    val lineColor by animateColorAsState(
-        targetValue = if (isCurrentLine) accentColor else unhighlightedColor,
-        animationSpec = if (useAnimatedLyrics) spring(
-            stiffness = Spring.StiffnessVeryLow,
-            dampingRatio = Spring.DampingRatioMediumBouncy
-        ) else tween(durationMillis = 250),
-        label = "lineColor"
-    )
-
-    // Animated mode: fisheye scaling + alpha based on distance from current line
-    val targetScale = if (useAnimatedLyrics) when (distanceFromCurrent) {
-        0 -> if (immersiveMode) 1.02f else 1.1f; 1 -> 0.95f; else -> 0.85f
-    } else 1f
-    val targetPadding = if (useAnimatedLyrics) when (distanceFromCurrent) {
-        0 -> 32.dp; 1 -> 16.dp; else -> 8.dp
-    } else 12.dp
-    val targetAlpha = if (useAnimatedLyrics) when (distanceFromCurrent) {
-        0 -> 1.0f; 1 -> 0.6f; else -> 0.3f
-    } else 1f
-
-    val scale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = if (useAnimatedLyrics) spring(
-            stiffness = Spring.StiffnessVeryLow,
-            dampingRatio = Spring.DampingRatioMediumBouncy
-        ) else tween(durationMillis = 200),
-        label = "lineScale"
-    )
-    val verticalPadding by animateDpAsState(
-        targetValue = targetPadding,
-        animationSpec = if (useAnimatedLyrics) spring(
-            stiffness = Spring.StiffnessVeryLow,
-            dampingRatio = Spring.DampingRatioMediumBouncy
-        ) else tween(durationMillis = 200),
-        label = "linePadding"
-    )
-    val alpha by animateFloatAsState(
-        targetValue = targetAlpha,
-        animationSpec = if (useAnimatedLyrics) spring(
-            stiffness = Spring.StiffnessLow,
-            dampingRatio = Spring.DampingRatioNoBouncy
-        ) else tween(durationMillis = 200),
-        label = "lineAlpha"
-    )
-
-    // Blur Effect
-    val targetBlur = if (useAnimatedLyrics && animatedLyricsBlurEnabled && distanceFromCurrent > 0) {
-        (distanceFromCurrent * animatedLyricsBlurStrength).coerceAtMost(10f).dp
-    } else 0.dp
-
-    val blurRadius by animateDpAsState(
-        targetValue = targetBlur,
-        animationSpec = if (useAnimatedLyrics) tween(durationMillis = 400) else tween(durationMillis = 200),
-        label = "lineBlur"
-    )
-
-    // Animated mode: apply graphicsLayer for scale/alpha transforms
-    val baseModifier = if (useAnimatedLyrics && !immersiveMode) {
-        when (lyricsAlignment) {
-            "center" -> modifier.padding(horizontal = 36.dp)
-            "right" -> modifier.padding(start = 36.dp)
-            else -> modifier.padding(end = 36.dp)
-        }
-    } else {
-        modifier
-    }
-    val animatedModifier = if (useAnimatedLyrics) {
-        baseModifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-                transformOrigin = TransformOrigin(
-                    pivotFractionX = when (lyricsAlignment) {
-                        "center" -> 0.5f
-                        "right" -> 1f
-                        else -> 0f
-                    },
-                    pivotFractionY = 0.5f
-                )
-            }
-            .then(if (blurRadius > 0.dp) Modifier.blur(blurRadius) else Modifier)
-    } else baseModifier
-
-    // Roman or Translate Logic
-    val translationText = line.translation
-    val romanizationText = line.romanization
-
-    val secondaryStyle = remember(style) {
-        style.copy(
-            fontSize = (style.fontSize.value * 0.75f).sp,
-            fontWeight = FontWeight.Normal
-        )
-    }
-
-    val romanizationColor = lineColor.copy(alpha = lineColor.alpha * 0.85f)
-    val translationColor = lineColor.copy(alpha = lineColor.alpha * 0.55f)
-
-    val horizontalAlignment = when (lyricsAlignment) {
-        "center" -> Alignment.CenterHorizontally
-        "right" -> Alignment.End
-        else -> Alignment.Start
-    }
-
-    val textAlign = when (lyricsAlignment) {
-        "center" -> TextAlign.Center
-        "right" -> TextAlign.Right
-        else -> TextAlign.Left
-    }
-
-    val boxAlignment = when (lyricsAlignment) {
-        "center" -> Alignment.TopCenter
-        "right" -> Alignment.TopEnd
-        else -> Alignment.TopStart
-    }
-
-    if (sanitizedWordClusters.isNullOrEmpty()) {
-        Column(
-            modifier = animatedModifier
-                .fillMaxWidth()
-                .clip(MeloLayout.CardShape)
-                .clickable { onClick() }
-                .padding(vertical = verticalPadding, horizontal = MeloLayout.Space1),
-            horizontalAlignment = horizontalAlignment
-        ) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = boxAlignment) {
-                // Invisible bold text to reserve layout space and prevent reflow
-                Text(
-                    text = sanitizedLine,
-                    style = style,
-                    color = Color.Transparent,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = textAlign
-                )
-                Text(
-                    text = sanitizedLine,
-                    style = style,
-                    color = lineColor,
-                    fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal,
-                    textAlign = textAlign
-                )
-            }
-
-            if (showRomanization && !romanizationText.isNullOrBlank()) {
-                Text(
-                    text = romanizationText,
-                    style = secondaryStyle,
-                    color = romanizationColor,
-                    textAlign = textAlign,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-
-            if (showTranslation && !translationText.isNullOrBlank()) {
-                Text(
-                    text = translationText,
-                    style = secondaryStyle,
-                    color = translationColor,
-                    textAlign = textAlign,
-                    modifier = Modifier.padding(top = MeloLayout.Space1)
-                )
-            }
-        }
-    } else {
-        val highlightedWordIndex by remember(position, sanitizedWords, line.time, lineEndTime) {
-            derivedStateOf {
-                resolveHighlightedWordIndex(
-                    words = requireNotNull(sanitizedWords),
-                    positionMs = position,
-                    lineStartTimeMs = line.time.toLong(),
-                    lineEndTimeMs = lineEndTime
-                )
-            }
-        }
-
-        Column(
-            modifier = animatedModifier
-                .fillMaxWidth()
-                .clip(MeloLayout.CardShape)
-                .clickable { onClick() }
-                .padding(vertical = verticalPadding, horizontal = MeloLayout.Space1),
-            horizontalAlignment = horizontalAlignment
-        ) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = when (lyricsAlignment) {
-                    "center" -> Arrangement.spacedBy(MeloLayout.Space1, Alignment.CenterHorizontally)
-                    "right" -> Arrangement.spacedBy(MeloLayout.Space1, Alignment.End)
-                    else -> Arrangement.spacedBy(MeloLayout.Space1, Alignment.Start)
-                },
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                sanitizedWordClusters.forEach { cluster ->
-                    cluster.words.forEachIndexed { clusterOffset, word ->
-                        val wordIndex = cluster.startIndex + clusterOffset
-                        key("${line.time}_${word.time}_${word.word}_$wordIndex") {
-                            LyricWordSpan(
-                                word = word,
-                                isHighlighted = isCurrentLine && wordIndex == highlightedWordIndex,
-                                useAnimatedLyrics = useAnimatedLyrics,
-                                style = style,
-                                highlightedColor = accentColor,
-                                unhighlightedColor = unhighlightedColor
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (showRomanization && !romanizationText.isNullOrBlank()) {
-                Text(
-                    text = romanizationText,
-                    style = secondaryStyle,
-                    color = romanizationColor,
-                    textAlign = textAlign,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-
-            if (showTranslation && !translationText.isNullOrBlank()) {
-                Text(
-                    text = translationText,
-                    style = secondaryStyle,
-                    color = translationColor,
-                    textAlign = textAlign,
-                    modifier = Modifier.padding(top = MeloLayout.Space1)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun LyricWordSpan(
-    word: SyncedWord,
-    isHighlighted: Boolean,
-    useAnimatedLyrics: Boolean = false,
-    style: TextStyle,
-    highlightedColor: Color,
-    unhighlightedColor: Color,
-    modifier: Modifier = Modifier
-) {
-    val wordAnimSpec = if (useAnimatedLyrics) spring<Float>(
-        stiffness = Spring.StiffnessVeryLow,
-        dampingRatio = Spring.DampingRatioMediumBouncy
-    ) else tween(durationMillis = 200)
-
-    val color by animateColorAsState(
-        targetValue = if (isHighlighted) highlightedColor else unhighlightedColor,
-        animationSpec = if (useAnimatedLyrics) spring(
-            stiffness = Spring.StiffnessVeryLow,
-            dampingRatio = Spring.DampingRatioMediumBouncy
-        ) else tween(durationMillis = 200),
-        label = "wordColor"
-    )
-
-    // Scale: pop up to 1.10 on highlight, settle back to 1f. Only active when
-    // animated lyrics is on — layout is untouched because it's applied in graphicsLayer.
-    val scale by animateFloatAsState(
-        targetValue = if (useAnimatedLyrics && isHighlighted) 1.10f else 1f,
-        animationSpec = wordAnimSpec,
-        label = "wordScale"
-    )
-
-    // Alpha: unhighlighted words dim slightly so the active word pops without
-    // needing a hard color contrast. Only active when animated lyrics is on.
-    val alpha by animateFloatAsState(
-        targetValue = if (useAnimatedLyrics && !isHighlighted) 0.55f else 1f,
-        animationSpec = wordAnimSpec,
-        label = "wordAlpha"
-    )
-
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        // Invisible bold text to reserve layout space and prevent reflow
-        Text(
-            text = word.word,
-            style = style,
-            color = Color.Transparent,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = word.word,
-            style = style,
-            color = color,
-            fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
-            // Scale and alpha applied at draw phase — zero layout impact per frame.
-            modifier = Modifier.graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-            }
-        )
+    val plain = lyrics.plain ?: return emptyList()
+    val romanizationShown = if (hasRomanized) showRomanization else true
+    val translationShown = if (hasTranslated) showTranslation else true
+    return plain.map { entry ->
+        val (primary, romanization, translation) = splitPlainLyric(entry)
+        val sub = romanization.takeIf { romanizationShown && it.isNotBlank() }
+            ?: translation.takeIf { translationShown && it.isNotBlank() }
+        PickableLine(text = primary, subText = sub, timing = null)
     }
 }
 
@@ -1808,7 +1283,7 @@ fun PlainLyricsLine(
 
     Column(modifier = modifier, horizontalAlignment = horizontalAlignment) {
         if (primaryText.isNotBlank()) {
-            Text(text = primaryText, style = style, color = LocalContentColor.current.copy(alpha = MeloAlpha.Secondary), textAlign = textAlign)
+            Text(text = primaryText, style = style, color = LocalContentColor.current, textAlign = textAlign)
 
             if (showRomanization && romanizationText.isNotBlank()) {
                 Text(
@@ -2007,105 +1482,4 @@ internal fun resolveCurrentLineIndex(
         val lineEndTime = resolveLineEndTimeMs(line, nextTime)
         position in line.time.toLong()..<lineEndTime
     }?.index ?: -1
-}
-
-@Composable
-private fun LyricsTrackInfo(
-    song: Song?,
-    modifier: Modifier = Modifier,
-    backgroundColor: Color,
-    contentColor: Color,
-    isPlaying: Boolean
-) {
-    if (song == null) return
-
-    val albumShape = CircleShape
-
-    // Helper state to stop rotation when paused, but we want it to pause in place?
-    // Using infiniteTransition.animateFloat will reset on recomposition if spec changes or stops.
-    // For a realistic vinyl pause, we need a manual Animatable that loops.
-    // But for simplicity requested: "Animate the cover art to rotate... when music is playing".
-    // If we just use conditional Modifier.graphicsLayer rotation, it might jump.
-    // Let's use a simpler approach: if isPlaying, rotate.
-    
-    // Better approach for pausing rotation in place is non-trivial without a dedicated running time state.
-    // Given the constraints, I will use a simple AnimatedVisibility or just let it reset, OR
-    // use a monotonic clock if possible.
-    // Let's stick to infinite transition for running, and maybe 0f for static?
-    // Actually, user said "simulate a vinyl record". This implies continuous storage of rotation?
-    // I'll try to implement continuous rotation.
-    
-    val currentRotation = remember { Animatable(0f) }
-    
-    LaunchedEffect(isPlaying) {
-        if (isPlaying) {
-            // Spin forever. 8s per revolution halves the effective per-second animation work
-            // vs the original 4s cadence — visually still clearly a rotating "vinyl", but
-            // drives fewer Compose invalidations during long listening sessions.
-            while (true) {
-                currentRotation.animateTo(
-                    targetValue = currentRotation.value + 360f,
-                    animationSpec = tween(8000, easing = LinearEasing)
-                )
-            }
-        } else {
-             currentRotation.stop()
-        }
-    }
-
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space2)
-    ) {
-        SmartImage(
-            model = song.albumArtUriString ?: R.drawable.rounded_album_24,
-            shape = albumShape,
-            contentDescription = "Cover Art",
-            modifier = Modifier
-                .size(66.dp)
-                .padding(MeloLayout.Space2)
-                .graphicsLayer {
-                    rotationZ = currentRotation.value % 360f
-                }
-                .clip(albumShape),
-            contentScale = ContentScale.Crop
-        )
-
-        Column(
-            modifier = Modifier
-                .weight(1f, fill = false) // Allow shrinking if content is small
-                .padding(vertical = MeloLayout.Space2)
-                .padding(end = MeloLayout.Space2),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    color = contentColor,
-                    //textGeometricTransform = TextGeometricTransform(scaleX = (0.9f)),
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song.displayArtist,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    color = contentColor.copy(alpha = MeloAlpha.Secondary),
-                    //textGeometricTransform = TextGeometricTransform(scaleX = (0.9f)),
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        PlayingEqIcon(
-            modifier = Modifier
-                .padding(start = 8.dp, end = MeloLayout.Space4)
-                .size(width = 18.dp, height = 16.dp),
-            color = contentColor,
-            isPlaying = isPlaying
-        )
-    }
 }

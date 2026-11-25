@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 8 to 11: the starting window, the M on Melo's black. MainActivity sets the plain black back once the app draws. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><color android:color="#FF0B0B0B" /></item>
+    <item android:drawable="@drawable/splash_logo_lit_amethyst" android:width="288dp" android:height="288dp" android:gravity="center" />
+</layer-list>

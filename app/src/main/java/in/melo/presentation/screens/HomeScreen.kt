@@ -1,5 +1,9 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.data.TourTarget
+import `in`.melo.presentation.components.onboarding.tourAnchor
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -12,7 +16,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.runtime.CompositionLocalProvider
 import `in`.melo.presentation.components.LocalHomeGradients
-import `in`.melo.presentation.components.LocalHomePressMotion
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,13 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.rounded.DragHandle
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -65,6 +61,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -101,6 +101,8 @@ import `in`.melo.data.HomeRecommendationType
 import `in`.melo.data.HomeRecommendationPick
 import `in`.melo.data.YouTubeHomeShelf
 import `in`.melo.data.YouTubeHomeChip
+import `in`.melo.data.MixesDial
+import `in`.melo.data.ArtistDialFill
 import `in`.melo.data.source
 import `in`.melo.data.model.toSong
 import `in`.melo.data.preferences.CollagePattern
@@ -130,7 +132,17 @@ import sh.calvin.reorderable.ReorderableColumn
 private const val COLLAGE_ITEMS = 6
 private const val COLLAGE_MINIMUM = 3
 
-/** Distributes the selected Home feed's first picks across its shelves. */
+/** Where a Home shelf's songs go in the YouTube speed dial, by its title, in the languages YouTube names it in. */
+private fun youTubeDialShelfRank(title: String): Int = when (title.trim().lowercase()) {
+    "speed dial" -> 0
+    "listen again", "nghe lại", "もう一度聴く" -> 1
+    "forgotten favorites", "forgotten favourites", "giai điệu quen thuộc", "よく聴いたお気に入りの曲" -> 2
+    "quick picks", "lựa chọn nhanh", "chọn nhanh đài phát", "クイック ミックス" -> 3
+    else -> YOUTUBE_DIAL_OTHER_SHELF
+}
+
+private const val YOUTUBE_DIAL_OTHER_SHELF = 4
+
 private fun categoryDialEntries(shelves: List<YouTubeHomeShelf>): List<HomeSpeedDialEntry> {
     val longest = shelves.maxOfOrNull { it.items.size } ?: return emptyList()
     val picks = ArrayList<Music>()
@@ -148,6 +160,8 @@ private fun categoryDialEntries(shelves: List<YouTubeHomeShelf>): List<HomeSpeed
 fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues: PaddingValues) {
     val ui = model.ui
     val pins by model.pins.collectAsStateWithLifecycle()
+    // Taken off the dials with "Remove from dial"; kept off until pinned again.
+    val hiddenFromDial by model.hiddenFromDial.collectAsStateWithLifecycle()
     val downloads by ui.downloadCollections.collectAsStateWithLifecycle()
     val downloadsTitle = stringResource(R.string.home_downloads)
     val settings by ui.settings.collectAsStateWithLifecycle()
@@ -218,144 +232,229 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
     val activeDialSource = if (settings.homeDialSource == AppSettings.DIAL_SOURCE_SPOTIFY && !discovery.spotifyEnabled) {
         AppSettings.DIAL_SOURCE_YOUTUBE
     } else settings.homeDialSource
-    var spotifyDialRefreshKey by remember(model) { mutableStateOf(0) }
+    val spotifyDialRefreshKey = HomeDialRounds.shuffle
+    val dialContext = androidx.compose.ui.platform.LocalContext.current
     val newReleaseIds = remember(personalizedHome) {
         personalizedHome.filter { it.title.contains("release", ignoreCase = true) || it.title.contains("new music", ignoreCase = true) }
             .flatMap(YouTubeHomeShelf::items).mapTo(HashSet(), Music::id)
     }
-    val youtubeMixEntries = remember(homeRecommendations.youtubeMixes, homeRecommendations.picks, personalizedHome) {
-        buildList {
-            homeRecommendations.youtubeMixes.forEach { add(HomeSpeedDialEntry(it)) }
-            homeRecommendations.picks
-                .filter { it.type in setOf(
-                    HomeRecommendationType.MOOD,
-                    HomeRecommendationType.PERSONAL_STATION,
-                    HomeRecommendationType.NEW_RELEASE_MIX,
-                    HomeRecommendationType.DISCOVERY_STATION,
-                ) }
-                .forEach { pick -> add(HomeSpeedDialEntry(pick.item, pick.title, pick.artworkUrls.firstOrNull(), pick)) }
-            personalizedHome.filter { shelf -> shelf.title.contains("mix", ignoreCase = true) }
-                .flatMap(YouTubeHomeShelf::items).forEach { add(HomeSpeedDialEntry(it)) }
-        }.filter { it.item.kind == MusicKind.Playlist }
-            .distinctBy { it.item.id }
-            .take(SPEED_DIAL_MAX_ITEMS)
+    // Melo's own stations, dealt with YouTube's mixes; kept by id to open them as stations.
+    val stationPicks = remember(homeRecommendations.picks) {
+        homeRecommendations.picks.filter { it.type in setOf(
+            HomeRecommendationType.MOOD,
+            HomeRecommendationType.PERSONAL_STATION,
+            HomeRecommendationType.NEW_RELEASE_MIX,
+            HomeRecommendationType.DISCOVERY_STATION,
+        ) && it.item.kind == MusicKind.Playlist }.associateBy { it.item.id }
     }
-    val spotifyMixEntries = remember(discovery.spotifyEnabled, content?.playlists) {
-        if (discovery.spotifyEnabled) content?.playlists.orEmpty().map { HomeSpeedDialEntry(it) } else emptyList()
+    // Only the playlists Spotify made for this listener (Daily Mixes, Discover Weekly, Release
+    // Radar…), not the listener's own playlists or editorial ones.
+    val spotifyMixes = remember(discovery.spotifyEnabled, content?.playlists) {
+        if (discovery.spotifyEnabled) content?.playlists.orEmpty().filter(MixesDial::isSpotifyMix) else emptyList()
     }
-    val mixEntries = remember(youtubeMixEntries, spotifyMixEntries) {
-        buildList {
-            repeat(maxOf(youtubeMixEntries.size, spotifyMixEntries.size)) { index ->
-                youtubeMixEntries.getOrNull(index)?.let(::add)
-                spotifyMixEntries.getOrNull(index)?.let(::add)
-            }
-        }.distinctBy { it.item.id }.take(SPEED_DIAL_MAX_ITEMS)
+    fun mixEntry(item: Music): HomeSpeedDialEntry = stationPicks[item.id]
+        ?.let { pick -> HomeSpeedDialEntry(pick.item, pick.title, pick.artworkUrls.firstOrNull(), pick) }
+        ?: HomeSpeedDialEntry(item)
+    // Before the first deal: the mixes already at hand, so the page isn't empty while it's dealt.
+    val mixEntries = remember(homeRecommendations.youtubeMixes, stationPicks, personalizedHome, spotifyMixes, hiddenFromDial) {
+        (homeRecommendations.youtubeMixes + personalizedHome.flatMap(YouTubeHomeShelf::items).filter(MixesDial::isYouTubeMix) +
+            stationPicks.values.map(HomeRecommendationPick::item) + spotifyMixes)
+            .filter { it.kind == MusicKind.Playlist && it.id !in hiddenFromDial }
+            .distinctBy(Music::id)
+            .take(MixesDial.SIZE)
+            .map(::mixEntry)
     }
-    val mixItemIds = remember(youtubeMixEntries, settings.homeMixesDialEnabled) {
-        if (settings.homeMixesDialEnabled) youtubeMixEntries.mapTo(HashSet()) { it.item.id } else emptySet()
+    // What was played lately (on the
+    // account and here), then YouTube's own Speed dial shelf, then the rest of Home's feed, so the
+    // dial is always full.
+    val playedLately = remember(recent, spotifyHistory, recordedHistory, homeRecommendations.youtubeRecent) {
+        (recent + spotifyHistory + recordedHistory.map { it.track } + homeRecommendations.youtubeRecent)
+            .filter { it.kind == MusicKind.Track }
+            .distinctBy(Music::id)
     }
-    val speedDialEntries = remember(
-        filteredHome, youTubeHome.shelves, personalizedHome, newReleaseIds, pins, homeRecent, homeRecommendations.picks,
-        homeRecommendations.youtubeMixes, mixItemIds, localPlaylists, youTubePlaylists, localFiles, downloads, content,
-        ui.likedSongs, activeDialSource, settings.homeArtistDialEnabled,
-        discovery.spotifyEnabled, spotifyHistory, spotifyDialRefreshKey,
+    fun shelvesRanked(rank: Int) = personalizedHome.filter { youTubeDialShelfRank(it.title) == rank }.flatMap(YouTubeHomeShelf::items)
+    val dialHistory = remember(playedLately, personalizedHome) {
+        playedLately + shelvesRanked(0) + personalizedHome
+            .filterNot { youTubeDialShelfRank(it.title) == 0 }
+            .flatMap(YouTubeHomeShelf::items)
+    }
+    // The tiles past the pins, for the dial's source. For
+    // YouTube, its own Speed dial shelf whole and in its order, then filled to the dial's size the
+    // way YouTube fills that shelf: Listen again, what was played lately, forgotten favourites,
+    // Quick picks, then the history above. Every kind of tile counts: songs, albums, playlists
+    // and artists. Spotify's picks go ahead of the YouTube dial, which fills what they can't.
+    val livePool = remember(
+        personalizedHome, playedLately, dialHistory, content, activeDialSource, discovery.spotifyEnabled,
+        spotifyHistory, spotifyDialRefreshKey, settings.homeDialLocalFiles, settings.homeArtistDialEnabled, hiddenFromDial,
     ) {
-        if (filteredHome) {
-            categoryDialEntries(youTubeHome.shelves).distinctBy { it.item.id }.take(SPEED_DIAL_MAX_ITEMS)
-        } else {
-            val sourceItems = when {
-                activeDialSource == AppSettings.DIAL_SOURCE_HISTORY -> homeRecent
-                activeDialSource == AppSettings.DIAL_SOURCE_SPOTIFY -> buildList {
+        val youTubeDial = buildList {
+            addAll(shelvesRanked(0))
+            addAll(shelvesRanked(1))
+            addAll(playedLately)
+            addAll(shelvesRanked(2))
+            addAll(shelvesRanked(3))
+            addAll(dialHistory)
+        }
+        when (activeDialSource) {
+            AppSettings.DIAL_SOURCE_HISTORY -> dialHistory
+            AppSettings.DIAL_SOURCE_SPOTIFY -> buildList {
+                // Shuffled by the refresh key alone, so only a refresh deals them anew.
+                addAll(buildList {
                     addAll(spotifyHistory.filter { it.source == `in`.melo.data.MusicSource.Spotify })
                     addAll(content?.savedTracks.orEmpty())
-                    addAll(content?.playlists.orEmpty())
-                    addAll(content?.albums.orEmpty())
-                    addAll(content?.artists.orEmpty())
-                // Keep the Spotify order stable through playback-driven recompositions;
-                // only the explicit refresh key should produce a new shuffle.
-                }.shuffled(kotlin.random.Random(spotifyDialRefreshKey))
-                else -> buildList {
-                    // Recommendation picks are rebuilt and reshuffled on refresh.
-                    // Put them before the long personalized feed so the Speed
-                    // Dial's page cap doesn't hide every refreshed pick.
-                    addAll(homeRecommendations.picks.filterNot { it.item.id in mixItemIds }.map(HomeRecommendationPick::item))
-                    personalizedHome.forEach { shelf -> addAll(shelf.items.filterNot { it.id in mixItemIds }) }
-                    addAll(homeRecent.filter { it.source == `in`.melo.data.MusicSource.YouTubeMusic })
-                }
+                }.distinctBy(Music::id).shuffled(kotlin.random.Random(spotifyDialRefreshKey)))
+                addAll(youTubeDial)
             }
-            buildList {
-                pins.forEach { add(HomeSpeedDialEntry(it)) }
-                sourceItems.forEach { item ->
-                    val pick = homeRecommendations.picks.firstOrNull { it.item.id == item.id }
-                        ?.takeIf { activeDialSource == AppSettings.DIAL_SOURCE_YOUTUBE }
-                    if (pick != null) add(HomeSpeedDialEntry(
-                        item = pick.item,
-                        title = pick.title,
-                        artworkUrl = pick.artworkUrls.firstOrNull() ?: pick.item.imageUrl,
-                        recommendation = pick,
-                        isNewRelease = pick.type == HomeRecommendationType.LATEST_RELEASE,
-                    )) else add(HomeSpeedDialEntry(item, isNewRelease = item.id in newReleaseIds))
-                }
-                homeRecommendations.picks.forEach { pick ->
-                    if (activeDialSource == AppSettings.DIAL_SOURCE_YOUTUBE && pick.item.id !in mixItemIds) {
-                        add(HomeSpeedDialEntry(
-                            item = pick.item,
-                            title = pick.title,
-                            artworkUrl = pick.artworkUrls.firstOrNull() ?: pick.item.imageUrl,
-                            recommendation = pick,
-                            isNewRelease = pick.type == HomeRecommendationType.LATEST_RELEASE,
-                        ))
-                    }
-                }
-                if (activeDialSource == AppSettings.DIAL_SOURCE_SPOTIFY && (content?.savedTrackCount ?: 0) > 0) {
-                    add(HomeSpeedDialEntry(ui.likedSongs))
-                }
-                if (activeDialSource == AppSettings.DIAL_SOURCE_YOUTUBE) {
-                    youTubePlaylists.forEach { add(HomeSpeedDialEntry(it)) }
-                }
-            }.distinctBy { it.item.id }
-                .let { entries ->
-                    val pinnedEntries = entries.filter { entry -> pins.any { it.id == entry.item.id } }
-                    pinnedEntries + entries.filterNot { entry -> pins.any { it.id == entry.item.id } }
-                }
-                .let { entries -> if (settings.homeArtistDialEnabled) entries.filterNot { it.item.kind == MusicKind.Artist } else entries }
-                .take(SPEED_DIAL_MAX_ITEMS)
+            else -> youTubeDial
+        }.asSequence()
+            .filter { settings.homeDialLocalFiles || it.source != `in`.melo.data.MusicSource.Local }
+            // With the artist dial on, artists have their own page.
+            .filterNot { settings.homeArtistDialEnabled && it.kind == MusicKind.Artist }
+            .filterNot { it.id in hiddenFromDial }
+            .distinctBy(Music::id)
+            .toList()
+    }
+    // A deal keeps more than the dial shows, so a tile taken off it is replaced from the round's
+    // own deal and not from what was just played.
+    val livePicks = remember(livePool) { livePool.take(SPEED_DIAL_MAX_ITEMS) }
+    // Dealt once a round (launch or pull to refresh) when the round's feed has arrived, and kept
+    // so a song starting doesn't move the tiles; History is built as it goes.
+    val dialRound = HomeDialRounds.round
+    val dialKey = "$activeDialSource|${settings.homeDialLocalFiles}|${settings.homeArtistDialEnabled}"
+    val feedFresh = youTubeHome.personalizedLoadedAt > HomeDialRounds.roundStartedAt
+    val dealtDial = HomeDialRounds.speedDial
+    // The dials the last launch dealt, shown at once until
+    // this launch's are dealt, instead of a dial that changes as the history and the feed arrive.
+    val savedSpeedDial = remember(model) { model.savedDial(SAVED_SPEED_DIAL) }
+    val savedMixes = remember(model) { model.savedDial(SAVED_MIXES_DIAL) }
+    val speedDialPicks = when {
+        activeDialSource == AppSettings.DIAL_SOURCE_HISTORY -> livePicks
+        dealtDial != null && dealtDial.key == dialKey -> dealtDial.items
+        dealtDial == null && savedSpeedDial != null && savedSpeedDial.first == dialKey -> savedSpeedDial.second
+        else -> livePicks
+    }
+    val speedDialEntries = remember(
+        filteredHome, youTubeHome.shelves, pins, speedDialPicks, livePicks.takeIf { speedDialPicks.size < SPEED_DIAL_SIZE }, newReleaseIds, settings.homeArtistDialEnabled, hiddenFromDial,
+    ) {
+        if (filteredHome) {
+            // A mood's dial is its songs; a mood with no songs keeps its playlists so the page isn't blank.
+            val entries = categoryDialEntries(youTubeHome.shelves).distinctBy { it.item.id }
+                .filterNot { it.item.id in hiddenFromDial }
+            entries.filter { it.item.kind == MusicKind.Track }.ifEmpty { entries }.take(SPEED_DIAL_MAX_ITEMS)
+        } else {
+            // Pins first, whatever they are (artists' are on their own dial when it's on), then the dealt tiles.
+            val dialPins = if (settings.homeArtistDialEnabled) pins.filterNot { it.kind == MusicKind.Artist } else pins
+            // Only the round's deal: what was just played doesn't move its tiles. Only a deal
+            // too short for the dial is topped up with the live picks.
+            val picks = speedDialPicks.filterNot { item -> item.id in hiddenFromDial || pins.any { it.id == item.id } }
+            val fill = if (dialPins.size + picks.size < SPEED_DIAL_SIZE) livePicks.filterNot { item -> pins.any { it.id == item.id } } else emptyList()
+            (dialPins + picks + fill)
+                .distinctBy(Music::id)
+                .take(maxOf(SPEED_DIAL_SIZE, dialPins.size))
+                .map { HomeSpeedDialEntry(it, isNewRelease = it.id in newReleaseIds) }
         }
     }
-    val artistDialEntries = remember(pins, homeRecommendations.youtubeArtists, content?.artists, personalizedHome, settings.homeArtistDialOrder, homeDetails) {
-        val artists = buildList {
-            pins.filter { it.kind == MusicKind.Artist }.forEach { add(HomeSpeedDialEntry(it)) }
-            homeRecommendations.youtubeArtists.forEach { add(HomeSpeedDialEntry(it)) }
-            content?.artists.orEmpty().forEach { add(HomeSpeedDialEntry(it)) }
-            personalizedHome.flatMap(YouTubeHomeShelf::items).filter { it.kind == MusicKind.Artist }
-                .forEach { add(HomeSpeedDialEntry(it)) }
-        }.distinctBy { it.item.id }
-        val pinnedArtistIds = pins.filter { it.kind == MusicKind.Artist }.mapTo(HashSet(), Music::id)
+    // The artists' dial: the pins, the artists played most in the app, then the
+    // account's, the library's and the feed's artists. The played-most are ranked once a round,
+    // so a song starting doesn't move the tiles.
+    val feedArtists = remember(personalizedHome) {
+        personalizedHome.flatMap(YouTubeHomeShelf::items).filter { it.kind == MusicKind.Artist }
+    }
+    val playedMostArtists = remember(dialRound, settings.homeArtistDialEnabled, homeRecommendations.youtubeArtists, content?.artists, feedArtists) {
+        if (!settings.homeArtistDialEnabled) emptyList()
+        else ArtistDialFill.mostPlayed(
+            model.listeningHistory.entries.value,
+            homeRecommendations.youtubeArtists + content?.artists.orEmpty() + feedArtists,
+        )
+    }
+    val artistDialEntries = remember(pins, playedMostArtists, homeRecommendations.youtubeArtists, content?.artists, feedArtists, settings.homeArtistDialOrder, homeDetails, hiddenFromDial) {
+        val artistPins = pins.filter { it.kind == MusicKind.Artist }
+        val artists = ArtistDialFill.tiles(
+            pins = artistPins,
+            mostPlayed = playedMostArtists,
+            account = homeRecommendations.youtubeArtists,
+            library = content?.artists.orEmpty(),
+            feed = feedArtists,
+            hidden = hiddenFromDial,
+        ).map { HomeSpeedDialEntry(it) }
+        val pinnedArtistIds = artistPins.mapTo(HashSet(), Music::id)
         (artists.filter { it.item.id in pinnedArtistIds } +
             orderDialEntries(artists.filterNot { it.item.id in pinnedArtistIds }, settings.homeArtistDialOrder))
             .map { entry ->
                 val photo = homeDetails[entry.item.id]?.content?.item?.imageUrl
                 if (entry.artworkUrl.isNullOrBlank() && photo != null) entry.copy(artworkUrl = photo) else entry
             }
-            .take(SPEED_DIAL_MAX_ITEMS)
     }
     val showArtistDial = !filteredHome && settings.homeSpeedDialEnabled && settings.homeArtistDialEnabled && artistDialEntries.isNotEmpty()
     var refreshRequested by remember { mutableStateOf(false) }
     val servicesBusy = library.loading || homeRecommendations.loading || youTubeHome.personalizedLoading ||
         youTubeHome.loadingCategories || youTubeHome.loading
     var displayedSpeedDialEntries by remember(model) { mutableStateOf(speedDialEntries) }
-    var displayedMixEntries by remember(model) { mutableStateOf(mixEntries) }
+    val dealtMixes = HomeDialRounds.mixes
+    // A mix taken off the round's dial leaves its place to the next mix at hand.
+    val roundMixEntries = (dealtMixes?.items ?: savedMixes?.second?.takeIf { it.isNotEmpty() })
+        ?.let { dealt -> (dealt.filterNot { it.id in hiddenFromDial }.map(::mixEntry) + mixEntries).distinctBy { it.item.id }.take(MixesDial.SIZE) }
+        ?: mixEntries
+    var displayedMixEntries by remember(model) { mutableStateOf(roundMixEntries) }
     val hasLuckyPick = settings.homeLuckyTileEnabled && (
         homeRecommendations.picks.any { it.type != HomeRecommendationType.LATEST_RELEASE } ||
             homeRecent.isNotEmpty() || pins.any { it.kind == MusicKind.Track }
         )
     var displayedLuckyTile by remember(model) { mutableStateOf(hasLuckyPick) }
-    LaunchedEffect(refreshRequested, servicesBusy, speedDialEntries, mixEntries, hasLuckyPick) {
+    val roundReady = feedFresh && !refreshRequested && !servicesBusy
+    // The round's speed dial, dealt once from the fresh feed.
+    LaunchedEffect(dialRound, dialKey, roundReady) {
+        val dealt = HomeDialRounds.speedDial
+        if (roundReady && activeDialSource != AppSettings.DIAL_SOURCE_HISTORY &&
+            (dealt == null || dealt.round != dialRound || dealt.key != dialKey)
+        ) {
+            // At launch the last launch's tiles stay where they were while they are still to be
+            // had, and the fresh picks fill in after them; a pull to refresh deals all anew.
+            val kept = savedSpeedDial?.takeIf { dealt == null && dialRound == 0 && it.first == dialKey }?.second
+            val items = if (kept == null) livePicks else {
+                val available = livePool.mapTo(HashSet(), Music::id)
+                (kept.filter { it.id in available } + livePicks).distinctBy(Music::id).take(SPEED_DIAL_MAX_ITEMS)
+            }
+            HomeDialRounds.speedDial = DealtDial(dialRound, dialKey, items)
+            model.saveDial(SAVED_SPEED_DIAL, dialKey, items)
+        }
+    }
+    // The round's mixes, dealt once from the fresh feed and the further sources read for them.
+    LaunchedEffect(dialRound, roundReady, settings.homeMixesDialEnabled) {
+        if (!roundReady || !settings.homeMixesDialEnabled || HomeDialRounds.mixes?.round == dialRound) return@LaunchedEffect
+        val sources = model.mixesDialSources(personalizedHome)
+        val listened = recordedHistory.filter { it.track.genre.isNotBlank() }
+            .groupBy { it.track.genre }
+            .mapValues { (_, plays) -> plays.sumOf { it.track.durationMs.toLong() } }
+        val dealt = MixesDial.deal(
+            home = personalizedHome + sources.morePages,
+            mixedForYou = sources.mixedForYou + homeRecommendations.youtubeMixes,
+            stations = stationPicks.values.map(HomeRecommendationPick::item),
+            decades = sources.decades,
+            spotify = spotifyMixes,
+            listened = listened,
+        )
+        if (dealt.isEmpty()) return@LaunchedEffect
+        // At launch the last launch's mixes stay while they are still offered, as the speed dial's tiles do.
+        val kept = savedMixes?.second?.takeIf { HomeDialRounds.mixes == null && dialRound == 0 }
+        val items = if (kept == null) dealt else {
+            val offered = (personalizedHome + sources.morePages).flatMap(YouTubeHomeShelf::items).mapTo(HashSet(), Music::id)
+            offered += (dealt + sources.mixedForYou + sources.decades + homeRecommendations.youtubeMixes + spotifyMixes).map(Music::id)
+            offered += stationPicks.keys
+            (kept.filter { it.id in offered } + dealt).distinctBy(Music::id).take(MixesDial.SIZE)
+        }
+        HomeDialRounds.mixes = DealtDial(dialRound, "", items)
+        model.saveDial(SAVED_MIXES_DIAL, "", items)
+    }
+    LaunchedEffect(refreshRequested, servicesBusy, speedDialEntries, roundMixEntries, hasLuckyPick) {
         if (!refreshRequested && !servicesBusy) {
             // Keep the current dial intact while all refresh sources load, then
-            // commit one complete snapshot so its tiles can transition together.
+            // commit one complete snapshot so its tiles can transition together,
+            // with the new tiles' art already fetched.
+            if (speedDialEntries != displayedSpeedDialEntries) prefetchDialArt(dialContext, speedDialEntries)
+            if (roundMixEntries != displayedMixEntries) prefetchDialArt(dialContext, roundMixEntries)
             displayedSpeedDialEntries = speedDialEntries
-            displayedMixEntries = mixEntries
+            displayedMixEntries = roundMixEntries
             displayedLuckyTile = hasLuckyPick
         }
     }
@@ -379,9 +478,14 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
     val showSpeedDialSkeleton = showHomeSkeleton && displayedSpeedDialEntries.isEmpty()
     val pullState = rememberPullToRefreshState()
     val hasArtistPage = showArtistDial && !showHomeSkeleton
+    val hasArtistPageState = rememberUpdatedState(hasArtistPage)
     val homeSpeedDialVisible = settings.homeSpeedDialEnabled &&
         (displayedSpeedDialEntries.isNotEmpty() || youTubeHome.chips.isNotEmpty() || showSpeedDialSkeleton)
-    val feedCategoriesIndex = (if (homeSpeedDialVisible) 1 else 0) + (if (hasArtistPage) 1 else 0)
+    val hasHomeChips = youTubeHome.chips.isNotEmpty()
+    val homeChipsIndexOffset = if (hasHomeChips) 1 else 0
+    // First feed shelf, after the pinned chips, Speed Dial and the artist dial.
+    val feedCategoriesIndex = homeChipsIndexOffset + (if (homeSpeedDialVisible) 1 else 0) + (if (hasArtistPage) 1 else 0)
+    var homeChipsPx by remember { mutableIntStateOf(0) }
     val speedDialItemIds = remember(displayedSpeedDialEntries) { displayedSpeedDialEntries.mapTo(HashSet()) { it.item.id } }
     val overflowPins = remember(pins, speedDialItemIds, filteredHome) {
         if (filteredHome) emptyList() else pins.filterNot { it.id in speedDialItemIds }
@@ -418,22 +522,64 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
     var reorderingArtists by rememberSaveable { mutableStateOf(false) }
     val open: (Music) -> Unit = { navController.openMusic(ui, it) }
     var optionsFor by remember { mutableStateOf<Music?>(null) }
+    var optionsFromDial by remember { mutableStateOf(false) }
     val showOptions: (Music) -> Unit = {
         // The long-click handler of the card already vibrates.
+        optionsFromDial = false
+        optionsFor = it
+    }
+    val showDialOptions: (Music) -> Unit = {
+        optionsFromDial = true
         optionsFor = it
     }
     val openLibrary: () -> Unit = { navController.navigateToTopLevelSafely(Screen.Library.route) }
 
     val decay = rememberSplineBasedDecay<Float>()
     val evenFling = remember(decay) { EvenFling(decay) }
+    // Every page settles just under the pinned chips, never behind them: the dials where they
+    // sit on first open, the feed with a small gap so its first heading reads clearly.
+    val homeFeedGapPx = remember(density) { with(density) { MeloLayout.Space2.roundToPx() } }
+    // The mood chips scroll away with the list: the speed dial rests where it is with the list
+    // at its top, under them; the artists' dial and the feed rest just under the title.
+    val homeHeroRestPx = { if (hasHomeChips) homeChipsPx + listState.layoutInfo.mainAxisItemSpacing else 0 }
+    val homeDialRestPx = { listState.layoutInfo.mainAxisItemSpacing }
+    val homeFeedRestPx = { homeFeedGapPx }
+    val dialRestFor: (Any) -> Int = { key -> if (key == "artist_dial") homeDialRestPx() else homeHeroRestPx() }
+    // 0 with the list at its top, 1 once the chips have gone: the title shrinks into the bar.
+    val headerFold by remember(hasHomeChips) {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) 1f
+            else (listState.firstVisibleItemScrollOffset / homeChipsPx.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+        }
+    }
     val dialFling = remember(listState, decay) {
-        DialPageFling(listState, decay, restOffsetPx = { 0 }, nextOffsetPx = { 0 })
+        DialPageFling(
+            listState, decay,
+            restOffsetPx = dialRestFor,
+            nextOffsetPx = homeFeedRestPx,
+            artistPageFollows = { hasArtistPageState.value },
+        )
     }
     FrameBeatWhileScrolling(listState)
+    // The large title names the page under the middle of the screen: Home over the speed dial,
+    // Artists over the artist dial, For You once the feed has taken over.
+    val homePage by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            val under = info.visibleItemsInfo.firstOrNull { it.offset <= middle && it.offset + it.size > middle }?.key
+            when {
+                under == "artist_dial" -> HomeTitlePage.ARTISTS
+                under == "speed_dial" || under == "home_feed_categories" -> HomeTitlePage.HOME
+                listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 -> HomeTitlePage.HOME
+                else -> HomeTitlePage.FOR_YOU
+            }
+        }
+    }
     CompositionLocalProvider(
         LocalHomeGradients provides settings.homeGradients,
-        LocalHomePressMotion provides settings.homePressMotion,
     ) {
+    // The colour background behind Home is drawn by the app's root, behind every page.
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val viewportHeight = maxHeight
         Scaffold(
@@ -458,10 +604,19 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                     spotifyProfile = spotifyProfile,
                     onProfileClick = { navController.navigateSafely(Screen.SettingsCategory.createRoute("account")) },
                     isScrolled = isScrolled,
+                    titleFold = { headerFold },
                     transparentContainer = true,
                     refreshing = showHomeSkeleton,
                     pullFraction = { pullState.distanceFraction },
-                    animateLogo = settings.homeLoadingAnimations,
+                    animateLogo = !`in`.melo.presentation.utils.LocalReducedMotion.current,
+                    markAsTitle = homePage == HomeTitlePage.HOME,
+                    title = stringResource(
+                        when (homePage) {
+                            HomeTitlePage.HOME -> R.string.nav_bar_home
+                            HomeTitlePage.ARTISTS -> R.string.home_dial_artists_title
+                            HomeTitlePage.FOR_YOU -> R.string.home_page_for_you
+                        }
+                    ),
                 )
             }
         ) { innerPadding ->
@@ -469,11 +624,20 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
             val dialPageHeight = (
                 screenHeight - innerPadding.calculateTopPadding()
                 ).coerceAtLeast(360.dp)
-            val dialFooter = paddingValues.calculateBottomPadding() +
-                (if (hasSong) MiniPlayerHeight + 8.dp else 0.dp) + 12.dp
-            // Keep both swipe pages' tile grids the same size and at the same vertical position.
-            val dialGridRoom = (dialPageHeight - dialFooter - HOME_DIAL_PAGER_GRID_RESERVE).coerceAtLeast(180.dp)
-            val titledGridRoom = (dialPageHeight - dialFooter - 134.dp).coerceAtLeast(180.dp)
+            // The mini player's room is kept whether or not a song is on, so
+            // a song starting never reshapes the dial's tiles.
+            val dialFooter = paddingValues.calculateBottomPadding() + MiniPlayerHeight + 8.dp + 12.dp
+            // Each dial is one full screen under the pinned chips: the grid takes the
+            // room, the page ends at the bottom of the screen and the feed waits below it.
+            val chipsRowHeight = if (hasHomeChips) {
+                if (homeChipsPx > 0) with(density) { homeChipsPx.toDp() } else HOME_CHIPS_ROW_HEIGHT
+            } else 0.dp
+            val dialVisibleTop = chipsRowHeight + HOME_DIAL_TOP_GAP
+            val heroPageHeight = (dialPageHeight - dialVisibleTop).coerceAtLeast(360.dp)
+            val heroFooter = dialFooter
+            val heroGridRoom = (heroPageHeight - heroFooter - HOME_DIAL_HERO_GRID_RESERVE).coerceAtLeast(180.dp)
+            val artistPageHeight = (dialPageHeight - HOME_DIAL_TOP_GAP).coerceAtLeast(360.dp)
+            val titledGridRoom = (artistPageHeight - dialFooter - HOME_DIAL_HERO_GRID_RESERVE - 64.dp).coerceAtLeast(180.dp)
             Box(Modifier.fillMaxSize()) {
             PullToRefreshBox(
                 isRefreshing = refreshRequested,
@@ -481,7 +645,7 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                 indicator = {},
                 onRefresh = {
                     refreshRequested = true
-                    if (activeDialSource == AppSettings.DIAL_SOURCE_SPOTIFY) spotifyDialRefreshKey++
+                    HomeDialRounds.nextRound(reshuffle = activeDialSource == AppSettings.DIAL_SOURCE_SPOTIFY)
                     model.refreshHome()
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -492,22 +656,39 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                     modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding()),
                     contentPadding = PaddingValues(
                         top = 0.dp,
-                        bottom = paddingValues.calculateBottomPadding() + 38.dp + if (hasSong) MiniPlayerHeight else 0.dp
+                        bottom = paddingValues.calculateBottomPadding() + 38.dp + MiniPlayerHeight
                     ),
                     verticalArrangement = Arrangement.spacedBy(MeloLayout.SectionGap)
                 ) {
+                    // The one row of mood chips, under the title: it scrolls away with Speed Dial
+                    // so the pages below get the whole screen.
+                    if (hasHomeChips) {
+                        item(key = "home_feed_categories") {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    // Measured with its padding: the whole row Speed Dial rests under.
+                                    .onSizeChanged { homeChipsPx = it.height }
+                                    .padding(vertical = MeloLayout.Space2),
+                            ) {
+                                HomeCategoryChips(youTubeHome.chips, youTubeHome.selected, selectHomeCategory)
+                            }
+                        }
+                    }
                     if (homeSpeedDialVisible) {
                         item(key = "speed_dial", contentType = "speed_dial") {
-                            key(youTubeHome.selected?.params) {
+                            // Keyed by the Home tab's entries too, so the pager starts afresh on
+                            // Speed Dial each time Home is opened from another tab.
+                            key(youTubeHome.selected?.params, HomeReselect.entries) {
                                 HomeDialPager(
                                     mixesAvailable = !filteredHome && settings.homeMixesDialEnabled,
                                     speedDial = {
                                         HomeSpeedDial(
                                             entries = displayedSpeedDialEntries,
                                             pinnedIds = if (filteredHome) emptySet() else pins.mapTo(HashSet(), Music::id),
-                                            categoryChips = youTubeHome.chips,
-                                            selectedCategory = youTubeHome.selected,
-                                            onCategoryClick = selectHomeCategory,
+                                            categoryChips = emptyList(),
+                                            selectedCategory = null,
+                                            onCategoryClick = {},
                                             onItemClick = { entry ->
                                                 val pick = entry.recommendation
                                                 when {
@@ -517,7 +698,7 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                                                     else -> open(entry.item)
                                                 }
                                             },
-                                            onItemLongPress = { entry -> showOptions(entry.item) },
+                                            onItemLongPress = { entry -> showDialOptions(entry.item) },
                                             hasLuckyTile = !filteredHome && displayedLuckyTile,
                                             onLuckyClick = {
                                                 val picks = homeRecommendations.picks.filter { it.type != HomeRecommendationType.LATEST_RELEASE }
@@ -535,21 +716,23 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                                             onHistoryClick = { navController.navigateSafely(Screen.History.route) },
                                             onReorderPins = null,
                                             onCustomize = null,
-                                            sharedPagerHeader = true,
+                                            // The pinned chips above already give the grid its top margin.
+                                            showHeading = !hasHomeChips,
+                                            sharedPagerHeader = false,
                                             maxPages = SPEED_DIAL_MAX_PAGES,
                                             loading = showSpeedDialSkeleton,
                                             rows = settings.homeDialRows,
-                                            pageHeight = dialPageHeight,
-                                            footerReserve = dialFooter,
-                                            maxGridHeight = dialGridRoom,
+                                            pageHeight = heroPageHeight,
+                                            footerReserve = heroFooter,
+                                            maxGridHeight = heroGridRoom,
                                             showLabels = settings.homeDialLabels,
                                             showPinIcon = settings.homeDialPinIcon,
                                             tileStyle = settings.homeDialTileStyle,
                                             showNewReleaseTags = settings.homeDialNewReleaseTags,
                                             showHistoryTile = !filteredHome,
                                             onScrollToFeed = {
-                                                val nextPage = if (hasArtistPage) 1 else feedCategoriesIndex
-                                                homeScope.launch { listState.animateScrollToItem(nextPage) }
+                                                val nextPage = if (hasArtistPage) homeChipsIndexOffset + 1 else feedCategoriesIndex
+                                                homeScope.launch { listState.animateScrollToItem(nextPage, -(if (hasArtistPage) homeDialRestPx() else homeFeedRestPx())) }
                                             },
                                         )
                                     },
@@ -563,30 +746,33 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                                             onItemClick = { entry ->
                                                 entry.recommendation?.let(model::playHomeRecommendation) ?: open(entry.item)
                                             },
-                                            onItemLongPress = { entry -> showOptions(entry.item) },
+                                            onItemLongPress = { entry -> showDialOptions(entry.item) },
                                             hasLuckyTile = false,
                                             onLuckyClick = { null },
                                             onHistoryClick = {},
                                             onReorderPins = null,
                                             title = stringResource(R.string.home_dial_mixes_title),
-                                            sharedPagerHeader = true,
+                                            showHeading = false,
+                                            sharedPagerHeader = false,
                                             maxPages = 1,
                                             loading = showHomeSkeleton && displayedMixEntries.isEmpty(),
                                             rows = settings.homeDialRows,
-                                            pageHeight = dialPageHeight,
-                                            footerReserve = dialFooter,
-                                            maxGridHeight = dialGridRoom,
+                                            pageHeight = heroPageHeight,
+                                            footerReserve = heroFooter,
+                                            maxGridHeight = heroGridRoom,
                                             showLabels = settings.homeDialLabels,
                                             showPinIcon = false,
                                             tileStyle = settings.homeDialTileStyle,
                                             showNewReleaseTags = settings.homeDialNewReleaseTags,
                                             showHistoryTile = false,
+                                            showMixBadges = true,
                                             onScrollToFeed = {
-                                                val nextPage = if (hasArtistPage) 1 else feedCategoriesIndex
-                                                homeScope.launch { listState.animateScrollToItem(nextPage) }
+                                                val nextPage = if (hasArtistPage) homeChipsIndexOffset + 1 else feedCategoriesIndex
+                                                homeScope.launch { listState.animateScrollToItem(nextPage, -(if (hasArtistPage) homeDialRestPx() else homeFeedRestPx())) }
                                             },
                                         )
                                     },
+                                    modifier = Modifier.pullUnderChips(HOME_DIAL_PULL_UP).then(Modifier.tourAnchor(TourTarget.SPEED_DIAL)),
                                 )
                             }
                         }
@@ -600,14 +786,15 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                                 selectedCategory = null,
                                 onCategoryClick = {},
                                 onItemClick = { entry -> open(entry.item) },
-                                onItemLongPress = { entry -> showOptions(entry.item) },
+                                onItemLongPress = { entry -> showDialOptions(entry.item) },
                                 hasLuckyTile = false,
                                 onLuckyClick = { null },
                                 onHistoryClick = {},
                                 onReorderPins = if (artistDialEntries.size > 1) ({ reorderingArtists = true }) else null,
                                 title = stringResource(R.string.home_dial_artists_title),
+                                showTitleText = false,
                                 rows = settings.homeDialRows,
-                                pageHeight = dialPageHeight,
+                                pageHeight = artistPageHeight,
                                 footerReserve = dialFooter,
                                 maxGridHeight = titledGridRoom,
                                 showLabels = settings.homeDialLabels,
@@ -617,19 +804,13 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
                                 showHistoryTile = false,
                                 onMissingArtwork = { artist -> model.loadDetail(artist) },
                                 onScrollToFeed = {
-                                    homeScope.launch { listState.animateScrollToItem(feedCategoriesIndex) }
+                                    homeScope.launch { listState.animateScrollToItem(feedCategoriesIndex, -homeFeedRestPx()) }
                                 },
+                                modifier = Modifier.pullUnderChips(HOME_DIAL_PULL_UP),
                             )
                         }
                     }
 
-                    if (youTubeHome.chips.isNotEmpty()) {
-                        stickyHeader(key = "home_feed_categories") {
-                            Box(Modifier.fillMaxWidth()) {
-                                HomeCategoryChips(youTubeHome.chips, youTubeHome.selected, selectHomeCategory)
-                            }
-                        }
-                    }
                     if (showHomeSkeleton) {
                         item(key = "home_feed_skeleton") { HomeFeedSkeleton() }
                     } else if (!filteredHome) {
@@ -819,7 +1000,7 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
             }
             }
         }
-        Box(
+        if (!`in`.melo.ui.glass.pagesUnderGlass()) Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
@@ -849,7 +1030,10 @@ fun HomeScreen(model: MeloModel, navController: NavHostController, paddingValues
         pinnedIds = pins.filter { it.kind == MusicKind.Artist }.mapTo(HashSet(), Music::id),
         onTogglePin = model::togglePin,
     )
-    MusicOptionsHost(ui, navController, optionsFor) { optionsFor = null }
+    MusicOptionsHost(
+        ui, navController, optionsFor,
+        onRemoveFromDial = optionsFor?.takeIf { optionsFromDial }?.let { item -> { model.removeFromDial(item) } },
+    ) { optionsFor = null }
 }
 
 @Composable
@@ -880,32 +1064,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeShelf(
 
 @Composable
 private fun SectionHeader(title: String, onOpen: (() -> Unit)?) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            modifier = Modifier,
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        if (onOpen != null) FilledIconButton(
-            modifier = Modifier.size(48.dp),
-            colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.secondary
-            ),
-            onClick = onOpen,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                contentDescription = title,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
+    `in`.melo.presentation.components.MeloSectionHeader(title, onOpen = onOpen)
 }
 
 @Composable
@@ -946,12 +1105,12 @@ private fun PinsCollage(
         if (pins.size > 1) Box(Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter), contentAlignment = Alignment.CenterEnd) {
             FilledIconButton(
                 colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.secondary,
+                    containerColor = MaterialTheme.colorScheme.controlFill,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                 ),
                 onClick = onReorder,
             ) {
-                Icon(Icons.Rounded.SwapVert, contentDescription = stringResource(R.string.pins_reorder))
+                Icon(MeloIcons.SwapVert, contentDescription = stringResource(R.string.pins_reorder))
             }
         }
     }
@@ -970,7 +1129,7 @@ private fun PinnedPill(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    val container = MaterialTheme.colorScheme.surfaceContainer
+    val container = `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainer)
     val title = MaterialTheme.colorScheme.onSurface
     val shape = MeloLayout.CardShape
     val artPadding = (PinPillHeight - PinPillArtSize) / 2
@@ -993,7 +1152,7 @@ private fun PinnedPill(
                     Modifier.size(PinPillArtSize).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Rounded.Favorite, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    Icon(MeloIcons.Favorite, null, tint = MaterialTheme.colorScheme.onPrimary)
                 }
             } else {
                 SmartImage(
@@ -1057,7 +1216,7 @@ private fun LikedSongsCard(
                     modifier = Modifier.fillMaxSize(),
                 )
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary.copy(alpha = MeloAlpha.Tertiary)))
-                Icon(Icons.Rounded.Favorite, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(MeloIcons.Favorite, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onPrimary)
             }
             Column(Modifier.weight(1f).padding(horizontal = MeloLayout.Space4)) {
                 Text(stringResource(R.string.liked_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -1074,7 +1233,7 @@ private fun LikedSongsCard(
                     contentColor = MaterialTheme.colorScheme.primaryContainer,
                 ),
             ) {
-                Icon(Icons.Rounded.PlayArrow, stringResource(R.string.liked_play), Modifier.size(30.dp))
+                Icon(MeloIcons.PlayArrow, stringResource(R.string.liked_play), Modifier.size(30.dp))
             }
         }
     }
@@ -1083,7 +1242,7 @@ private fun LikedSongsCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PinsReorderSheet(pins: List<Music>, ui: PlayerViewModel, model: MeloModel, onDismiss: () -> Unit) {
-    ModalBottomSheet(
+    `in`.melo.presentation.components.MeloBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
@@ -1104,7 +1263,7 @@ private fun PinsReorderSheet(pins: List<Music>, ui: PlayerViewModel, model: Melo
             key(item.id) {
             ReorderableItem {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    color = `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainerHigh),
                     shape = MeloLayout.PanelShape,
                 ) {
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1123,10 +1282,10 @@ private fun PinsReorderSheet(pins: List<Music>, ui: PlayerViewModel, model: Melo
                             overflow = TextOverflow.Ellipsis,
                         )
                         IconButton(onClick = { ui.togglePin(item) }) {
-                            Icon(Icons.Outlined.PushPin, stringResource(R.string.pin_remove))
+                            Icon(MeloIcons.PushPin, stringResource(R.string.pin_remove))
                         }
                         IconButton(onClick = {}, modifier = Modifier.draggableHandle()) {
-                            Icon(Icons.Rounded.DragHandle, stringResource(R.string.reorder))
+                            Icon(MeloIcons.DragHandle, stringResource(R.string.reorder))
                         }
                     }
                 }
@@ -1135,3 +1294,20 @@ private fun PinsReorderSheet(pins: List<Music>, ui: PlayerViewModel, model: Melo
         }
     }
 }
+
+/**
+ * Draws a dial [by] higher than the list's section gap would put it, so the grid sits close
+ * under the pinned chips while the rest of the feed keeps its wider gaps.
+ */
+private fun Modifier.pullUnderChips(by: androidx.compose.ui.unit.Dp): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val shift = by.roundToPx().coerceAtMost(placeable.height)
+    layout(placeable.width, placeable.height - shift) { placeable.place(0, -shift) }
+}
+
+/** The names Home's dials are saved under for the next launch. */
+private const val SAVED_SPEED_DIAL = "speed"
+private const val SAVED_MIXES_DIAL = "mixes"
+
+/** Which page of Home the large title names. */
+private enum class HomeTitlePage { HOME, ARTISTS, FOR_YOU }

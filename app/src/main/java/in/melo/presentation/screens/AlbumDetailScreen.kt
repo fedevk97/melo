@@ -1,8 +1,13 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.backdrop.backdrops.LayerBackdrop
+import androidx.compose.foundation.layout.size
+import `in`.melo.ui.glass.pressShade
+import `in`.melo.ui.glass.pressSink
+import `in`.melo.ui.glass.rememberPressDent
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.data.source
-import androidx.compose.material.icons.rounded.Share
 import `in`.melo.presentation.utils.shareMusic
 import `in`.melo.presentation.utils.spotifyShareUrl
 import androidx.compose.foundation.layout.FlowRow
@@ -19,15 +24,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -59,11 +61,6 @@ import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImagePainter
 import coil.size.Size
 import androidx.compose.ui.res.stringResource
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.PushPin
-import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.navigation.NavHostController
 import `in`.melo.MeloModel
@@ -111,6 +108,9 @@ fun AlbumDetailScreen(
     }
     CollectionDetailLayout(current, detail?.content?.total ?: songs.size, ui, navController, rememberLazyListState()) {
         item(key = "album_actions") {
+            // Play loads the tracks itself, so it waits only on an album that came back empty.
+            DetailPlayRow(onPlay = { ui.playItem(current) }, onShuffle = { ui.shuffleItem(current) },
+                enabled = detail?.content == null || songs.isNotEmpty())
             // YouTube Music albums cannot be saved to Spotify or seed a Spotify radio.
             val spotifyAlbum = current.source == `in`.melo.data.MusicSource.Spotify
             DetailActionsRow(current, spotifyAlbum, current.id in saved, pins.any { it.id == current.id },
@@ -143,18 +143,19 @@ internal fun CollapsingAlbumTopBar(
     headerHeight: Dp,
     headerImageRequestSize: Size,
     onHeaderArtworkState: ((AsyncImagePainter.State) -> Unit)? = null,
+    /** How bright the cover's top band is, for the back button's tone; null until read. */
+    artTopLuminance: Float? = null,
+    /** The list under the bar, frosted once it folds; null draws it solid. */
+    listBackdrop: LayerBackdrop? = null,
     onBackPressed: () -> Unit,
-    onPlayClick: () -> Unit
 ) {
     val surfaceColor = MaterialTheme.colorScheme.background
-    val statusBarColor = if (LocalMeloDarkTheme.current) {
-        MaterialTheme.colorScheme.background.copy(alpha = MeloAlpha.Scrim)
-    } else {
-        MaterialTheme.colorScheme.surface.copy(alpha = MeloAlpha.Disabled)
-    }
+    // The bar's tone: over the open header, the cover's top band decides; folded, the page does.
+    val pageDark = LocalMeloDarkTheme.current
+    val chromeDark = if (collapseFraction < 0.5f && artTopLuminance != null) artTopLuminance < 0.4f else pageDark
+    val statusBarColor = if (chromeDark) Color.Black.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.30f)
 
     // Animation Values
-    val fabScale = 1f - collapseFraction
     val backgroundAlpha = collapseFraction
     val headerContentAlpha = 1f - (collapseFraction * 2).coerceAtMost(1f)
     val showExpandedArtwork = headerContentAlpha > 0.01f
@@ -186,7 +187,7 @@ internal fun CollapsingAlbumTopBar(
 
     // Title animation
     val titleScale = lerp(1f, 0.75f, collapseFraction)
-    val titlePaddingStart = lerp(24.dp, 58.dp, collapseFraction)
+    val titlePaddingStart = lerp(16.dp, 58.dp, collapseFraction)
     val titleMaxLines = if (collapseFraction < 0.5f) 2 else 1
     val titleVerticalBias = lerp(1f, -1f, collapseFraction)
     val animatedTitleAlignment =
@@ -204,14 +205,15 @@ internal fun CollapsingAlbumTopBar(
             .height(headerHeight)
             .clipToBounds()
     ) {
-        MeloStatusBarStyle(color = fallbackStatusBarColor)
+        MeloStatusBarStyle(color = fallbackStatusBarColor, useDarkIcons = !chromeDark)
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(headerHeight)
-                .background(surfaceColor.copy(alpha = backgroundAlpha))
         ) {
+            // Its own layer: the frost fades in with the fold without fading the header with it.
+            Box(Modifier.matchParentSize().foldedBar(listBackdrop, surfaceColor, backgroundAlpha))
             if (showExpandedArtwork) {
                 SmartImage(
                     model = album.albumArtUriString,
@@ -224,6 +226,7 @@ internal fun CollapsingAlbumTopBar(
                     onState = onHeaderArtworkState,
                     modifier = Modifier.fillMaxSize()
                 )
+                if (listBackdrop != null) CoverEdgeBlur(album.albumArtUriString, headerImageRequestSize, headerContentAlpha)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -244,13 +247,16 @@ internal fun CollapsingAlbumTopBar(
                     .fillMaxSize()
                     .statusBarsPadding()
             ) {
-                MeloIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.common_back),
-                    onClick = onBackPressed,
-                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 4.dp),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                )
+                // Floats over the cover in glass; its glyph turns white or black with what is
+                // behind it, the cover while the header is open and the page once it has folded.
+                ChromeTheme(dark = chromeDark) {
+                    GlassCircleButton(
+                        icon = MeloIcons.ArrowBack,
+                        contentDescription = stringResource(R.string.common_back),
+                        onClick = onBackPressed,
+                        modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 6.dp),
+                    )
+                }
 
                 Box(
                     modifier = Modifier
@@ -271,9 +277,7 @@ internal fun CollapsingAlbumTopBar(
                     ) {
                         Text(
                             text = album.title,
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                textGeometricTransform = TextGeometricTransform(scaleX = 1.2f),
-                            ),
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = titleMaxLines,
@@ -289,29 +293,13 @@ internal fun CollapsingAlbumTopBar(
                     }
                 }
 
-                LargeExtendedFloatingActionButton(
-                    onClick = onPlayClick,
-                    shape = DetailFabShape,
-                    // Shadows of concave outlines are re-tessellated by the renderer on every
-                    // frame: with this 360-point star it saturates it and freezes the UI.
-                    elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                        .graphicsLayer {
-                            scaleX = fabScale
-                            scaleY = fabScale
-                            alpha = fabScale
-                        }
-                ) {
-                    Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.common_shuffle_play_album))
-                }
             }
         }
     }
 }
 
-internal val DetailFabShape = RoundedStarShape(sides = 8, curve = 0.05, rotation = 0f)
+// A plain round play button, as Apple Music uses, in place of the old star.
+internal val DetailFabShape = androidx.compose.foundation.shape.CircleShape
 
 /** Buttons of an album or artist page, laid out as chosen in Settings. */
 @Composable
@@ -330,13 +318,13 @@ internal fun DetailActionsRow(
     val actions = buildList {
         add(downloadAction(ui, item))
         if (canSave) add(ActionSpec(`in`.melo.data.preferences.DetailAction.SAVE,
-            if (isSaved) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+            if (isSaved) MeloIcons.Favorite else MeloIcons.FavoriteBorder,
             stringResource(if (isSaved) R.string.saved_remove else R.string.saved_add), onSave, selected = isSaved))
         add(ActionSpec(`in`.melo.data.preferences.DetailAction.PIN,
-            if (isPinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
+            if (isPinned) MeloIcons.PushPinFill else MeloIcons.PushPin,
             stringResource(if (isPinned) R.string.pin_remove else R.string.pin_add_home), onPin, selected = isPinned))
-        if (showRadio) add(ActionSpec(`in`.melo.data.preferences.DetailAction.RADIO, Icons.Rounded.Radio, stringResource(R.string.radio_related), onRadio))
-        if (item.spotifyShareUrl() != null) add(ActionSpec(`in`.melo.data.preferences.DetailAction.SHARE, Icons.Rounded.Share,
+        if (showRadio) add(ActionSpec(`in`.melo.data.preferences.DetailAction.RADIO, MeloIcons.Radio, stringResource(R.string.radio_related), onRadio))
+        if (item.spotifyShareUrl() != null) add(ActionSpec(`in`.melo.data.preferences.DetailAction.SHARE, MeloIcons.Share,
             stringResource(R.string.share_item, item.title), { context.shareMusic(item) }))
     }
     DetailActionBar(`in`.melo.data.preferences.DetailPage.ALBUM, actions, ui)

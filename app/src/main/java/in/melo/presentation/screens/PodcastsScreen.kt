@@ -1,5 +1,12 @@
 package `in`.melo.presentation.screens
 
+import androidx.compose.foundation.layout.offset
+import `in`.melo.ui.theme.separator
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.ui.theme.artworkOutline
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -20,11 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,7 +40,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -143,9 +144,14 @@ fun PodcastsScreen(model: MeloModel, navController: NavHostController, paddingVa
     val visibleShelves = if (showingSearch) searchShelves else feed?.shelves.orEmpty()
     val bottomPadding = paddingValues.calculateBottomPadding() + 38.dp + if (hasSong) MiniPlayerHeight else 0.dp
 
+    // The title scrolls away with the page rather than staying as a filled bar over
+    // it, leaving only a soft fade under the status bar.
+    val topBarScroll = `in`.melo.presentation.components.rememberScrolledUnder()
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().nestedScroll(topBarScroll.connection),
+        containerColor = `in`.melo.presentation.components.pageBackground(),
         topBar = {
+            Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(0, topBarScroll.offsetPx.toInt()) }) {
             HomeGradientTopBar(
                 onSettingsClick = { navController.navigateSafely(Screen.Settings.route) },
                 onHistoryClick = { navController.navigateSafely(Screen.History.route) },
@@ -153,13 +159,19 @@ fun PodcastsScreen(model: MeloModel, navController: NavHostController, paddingVa
                 spotifyConnected = discovery.spotifyEnabled,
                 spotifyProfile = spotifyProfile,
                 onProfileClick = { navController.navigateSafely(Screen.SettingsCategory.createRoute("account")) },
+                transparentContainer = true,
+                // Podcasts has no options of its own, so the button is Settings itself, not a menu holding only it.
+                settingsButtonDirect = true,
+                title = stringResource(R.string.podcasts_title),
             )
+            }
+            `in`.melo.presentation.components.StatusBarFade { topBarScroll.fraction }
         },
     ) { innerPadding ->
         PullToRefreshBox(
             isRefreshing = refreshing,
             onRefresh = { model.refreshPodcastFeed() },
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            modifier = Modifier.fillMaxSize().background(`in`.melo.presentation.components.pageBackground()),
         ) {
             LazyColumn(
                 state = listState,
@@ -175,22 +187,23 @@ fun PodcastsScreen(model: MeloModel, navController: NavHostController, paddingVa
                         Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(
-                            text = stringResource(R.string.podcasts_title),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
                         OutlinedTextField(
                             value = query,
                             onValueChange = { query = it },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = CircleShape,
-                            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                            leadingIcon = { Icon(MeloIcons.Search, contentDescription = null) },
                             trailingIcon = if (query.isNotEmpty()) {
-                                { IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Close, stringResource(R.string.action_cancel)) } }
+                                { IconButton(onClick = { query = "" }) { Icon(MeloIcons.Close, stringResource(R.string.action_cancel)) } }
                             } else null,
                             placeholder = { Text(stringResource(R.string.podcasts_search_hint)) },
+                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                                unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                                focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                            ),
                         )
                     }
                 }
@@ -264,9 +277,13 @@ fun PodcastsScreen(model: MeloModel, navController: NavHostController, paddingVa
                             Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Button(onClick = model::loadMorePodcastFeed, enabled = !loadingMore) {
-                                Text(stringResource(if (loadingMore) R.string.podcasts_loading_more else R.string.podcasts_load_more))
-                            }
+                            `in`.melo.presentation.components.MeloButton(
+                                text = stringResource(if (loadingMore) R.string.podcasts_loading_more else R.string.podcasts_load_more),
+                                onClick = model::loadMorePodcastFeed,
+                                enabled = !loadingMore,
+                                size = `in`.melo.presentation.components.MeloButtonSize.Medium,
+                                style = `in`.melo.presentation.components.MeloButtonStyle.Tonal,
+                            )
                         }
                     }
                 }
@@ -295,12 +312,7 @@ private fun PodcastShelfSection(
     onLongPress: (Music) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MeloLayout.Space3)) {
-        Text(
-            text = shelf.title,
-            modifier = Modifier.padding(horizontal = MeloLayout.PageGutter),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
+        `in`.melo.presentation.components.MeloSectionHeader(shelf.title)
         LazyRow(
             contentPadding = PaddingValues(horizontal = MeloLayout.PageGutter),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -332,7 +344,7 @@ private fun PodcastCard(
         modifier = Modifier
             .width(168.dp)
             .homePress(interactions)
-            .artworkRim(MeloLayout.CardShape)
+            .artworkOutline(MeloLayout.CardShape)
             .combinedClickable(role = Role.Button, interactionSource = interactions, indication = null, onClick = onClick, onLongClick = onLongPress)
             .semantics {
                 contentDescription = listOf(item.title, item.subtitle, item.note)
@@ -356,7 +368,7 @@ private fun PodcastCard(
                         onClick = onClick,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(40.dp),
                     ) {
-                        Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(R.string.podcasts_play_episode))
+                        Icon(MeloIcons.PlayArrow, contentDescription = stringResource(R.string.podcasts_play_episode))
                     }
                 }
             }
@@ -425,7 +437,7 @@ fun PodcastDetailScreen(model: MeloModel, navController: NavHostController, brow
             term.isEmpty() || episode.title.lowercase(Locale.ROOT).contains(term)
         }
     }
-    Scaffold(
+    `in`.melo.presentation.components.MeloPageScaffold(
         topBar = {
             TopAppBar(
                 title = {
@@ -437,10 +449,10 @@ fun PodcastDetailScreen(model: MeloModel, navController: NavHostController, brow
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.podcasts_back))
+                        Icon(MeloIcons.ArrowBack, stringResource(R.string.podcasts_back))
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                colors = `in`.melo.presentation.components.meloPageBarColors(),
             )
         },
     ) { innerPadding ->
@@ -486,9 +498,9 @@ fun PodcastDetailScreen(model: MeloModel, navController: NavHostController, brow
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = CircleShape,
-                            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                            leadingIcon = { Icon(MeloIcons.Search, contentDescription = null) },
                             trailingIcon = if (episodeQuery.isNotEmpty()) {
-                                { IconButton(onClick = { episodeQuery = "" }) { Icon(Icons.Rounded.Close, stringResource(R.string.action_cancel)) } }
+                                { IconButton(onClick = { episodeQuery = "" }) { Icon(MeloIcons.Close, stringResource(R.string.action_cancel)) } }
                             } else null,
                             placeholder = { Text(stringResource(R.string.podcasts_search_episode_hint)) },
                         )
@@ -536,7 +548,7 @@ private fun PodcastEpisodeRow(episode: Music, onClick: () -> Unit, onLongPress: 
             .combinedClickable(role = Role.Button, onClick = onClick, onLongClick = onLongPress)
             .semantics { contentDescription = "${episode.title}, ${episode.subtitle}"; role = Role.Button },
         shape = MeloLayout.CardShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Row(
             Modifier.padding(MeloLayout.Space3),
@@ -557,7 +569,7 @@ private fun PodcastEpisodeRow(episode: Music, onClick: () -> Unit, onLongPress: 
                 if (episode.note.isNotBlank()) Text(episode.note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             FilledIconButton(onClick = onClick, modifier = Modifier.size(44.dp)) {
-                Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(R.string.podcasts_play_episode))
+                Icon(MeloIcons.PlayArrow, contentDescription = stringResource(R.string.podcasts_play_episode))
             }
         }
     }

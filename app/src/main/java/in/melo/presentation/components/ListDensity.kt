@@ -1,9 +1,9 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
@@ -11,7 +11,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import `in`.melo.R
@@ -34,11 +33,13 @@ fun SourceBadge(source: MusicSource, modifier: Modifier = Modifier, tint: Color 
         MusicSource.Spotify -> R.string.source_spotify
         MusicSource.YouTubeMusic -> R.string.source_youtube
         MusicSource.Local -> R.string.source_local
+        MusicSource.Addon -> R.string.source_addon
     })
     val iconModifier = modifier.size(14.dp)
     when (source) {
-        MusicSource.Spotify -> Icon(painterResource(R.drawable.ic_source_spotify), description, iconModifier, tint = tint)
-        MusicSource.YouTubeMusic -> Icon(painterResource(R.drawable.ic_source_youtube_music), description, iconModifier, tint = tint)
-        MusicSource.Local -> Icon(Icons.Rounded.Folder, description, iconModifier, tint = tint)
+        MusicSource.Spotify -> Icon(meloPainter(R.drawable.ic_source_spotify), description, iconModifier, tint = tint)
+        MusicSource.YouTubeMusic -> Icon(meloPainter(R.drawable.ic_source_youtube_music), description, iconModifier, tint = tint)
+        MusicSource.Local -> Icon(MeloIcons.Folder, description, iconModifier, tint = tint)
+        MusicSource.Addon -> Icon(MeloIcons.Link, description, iconModifier, tint = tint)
     }
 }

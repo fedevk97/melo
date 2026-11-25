@@ -10,7 +10,7 @@ Melo has no server, no analytics, no crash reporting and no advertising SDK.
 | YouTube (`music.youtube.com`, `www.youtube.com`, `*.googlevideo.com`) | Search text, playlist and video ids, an anonymous visitor identifier issued by YouTube; for a Spotify track played without a Spotify account, its title and artist | YouTube Music search, playlists and audio, without a Google account |
 | YouTube Music with a Google account (`accounts.google.com`, `music.youtube.com`) | Google's sign-in page, shown in the app. Then the account's cookies with each library and playlist request: list of playlists, their tracks, creation, renaming, visibility, added and removed tracks, deletion | Your YouTube Music playlists, only if you connect an account |
 | Spotify embed page (`open.spotify.com`) | A playlist id | Import a Spotify playlist without a Spotify account |
-| [LRCLIB](https://lrclib.net) | Title, artist, album and duration of a track | Lyrics when Spotify has none. Turn off in Settings → LRCLIB fallback. |
+| Lyrics services: [lrc.red](https://lrc.red), BetterLyrics (`lyrics-api.boidu.dev`), LyricsPlus (community mirrors), Unison (`unison.boidu.dev`), [LRCLIB](https://lrclib.net), KuGou (`lyrics.kugou.com`) | Title, artist, album and duration of the playing track | Synced lyrics, word by word where the service has them. Each one can be turned off in Settings → Lyrics sources. |
 
 Spotify receives a description of the device when the app registers (screen size, Android version, model, brand, manufacturer, volume steps, installer package), as it does from the official app. See [`protocol/02-client-token.md`](../protocol/02-client-token.md).
 

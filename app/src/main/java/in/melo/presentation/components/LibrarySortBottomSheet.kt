@@ -1,5 +1,9 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.theme.controlFill
+import `in`.melo.ui.theme.selectedFill
+import `in`.melo.ui.glass.MeloSwitch
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.animateColorAsState
@@ -23,9 +27,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -33,7 +34,6 @@ import androidx.compose.material3.MaterialTheme
 import `in`.melo.presentation.components.MeloBottomSheet as ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -81,12 +81,12 @@ fun LibrarySortBottomSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val selectedColor = MaterialTheme.colorScheme.secondaryContainer
-    val unselectedColor = MaterialTheme.colorScheme.surfaceContainerLow
+    val selectedColor = MaterialTheme.colorScheme.selectedFill
+    val unselectedColor = MaterialTheme.colorScheme.controlFill
 
     // Animate background color
     val boxBackgroundColor by animateColorAsState(
-        targetValue = if (viewToggleChecked) MaterialTheme.colorScheme.tertiary else unselectedColor,
+        targetValue = unselectedColor,
         label = "boxBackgroundColorAnimation"
     )
 
@@ -96,11 +96,9 @@ fun LibrarySortBottomSheet(
         label = "boxCornerRadiusAnimation"
     )
 
-    ModalBottomSheet(
+    `in`.melo.presentation.components.MeloBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(
             modifier = Modifier
@@ -294,9 +292,8 @@ private fun LibrarySheetSortDirectionCard(
         label = "sortDirectionContainerColor"
     ) { descending ->
         when {
-            !enabled -> MaterialTheme.colorScheme.surfaceContainerLow
-            descending -> MaterialTheme.colorScheme.tertiaryContainer
-            else -> MaterialTheme.colorScheme.primaryContainer
+            !enabled -> MaterialTheme.colorScheme.controlFill
+            else -> MaterialTheme.colorScheme.selectedFill
         }
     }
     val contentColor by transition.animateColor(
@@ -310,8 +307,7 @@ private fun LibrarySheetSortDirectionCard(
     ) { descending ->
         when {
             !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
-            descending -> MaterialTheme.colorScheme.onTertiaryContainer
-            else -> MaterialTheme.colorScheme.onPrimaryContainer
+            else -> MaterialTheme.colorScheme.onSurface
         }
     }
     val iconContainerColor by animateColorAsState(
@@ -364,7 +360,7 @@ private fun LibrarySheetSortDirectionCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.ArrowDownward,
+                    imageVector = MeloIcons.ArrowDownward,
                     contentDescription = null,
                     tint = contentColor,
                     modifier = Modifier
@@ -435,9 +431,9 @@ internal fun LibrarySheetToggleCard(
                     .weight(1f)
                     .padding(start = MeloLayout.Space2, end = 8.dp),
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (checked) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Switch(
+            MeloSwitch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 colors = SwitchDefaults.colors(
@@ -450,7 +446,7 @@ internal fun LibrarySheetToggleCard(
                 thumbContent = if (checked) {
                     {
                         Icon(
-                            imageVector = Icons.Rounded.Check,
+                            imageVector = MeloIcons.Check,
                             contentDescription = stringResource(R.string.library_sort_cd_switch_on),
                             //tint = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.size(SwitchDefaults.IconSize),
@@ -473,11 +469,9 @@ fun PlaylistSortBottomSheet(
     onDismiss: () -> Unit,
     onSelected: (`in`.melo.presentation.viewmodel.PlaylistSort) -> Unit,
 ) {
-    ModalBottomSheet(
+    `in`.melo.presentation.components.MeloBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).selectableGroup(),
@@ -497,7 +491,7 @@ fun PlaylistSortBottomSheet(
                 options.forEach { (option, label) ->
                     val isSelected = option == selected
                     Surface(
-                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                        color = if (isSelected) MaterialTheme.colorScheme.selectedFill else MaterialTheme.colorScheme.controlFill,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(MeloLayout.ArtworkShape)

@@ -77,13 +77,20 @@ class OfflineCacheTest {
         assertEquals(listOf("high/audio.m3u8"), variantUris(selectVariant(master) { _, _ -> 0 }))
         assertEquals(listOf("low/audio.m3u8"), variantUris(selectVariant(master) { uri, _ -> if (uri.startsWith("low")) 5_000 else 0 }))
         // Quality presets choose among uncached variants; a stored copy still wins.
-        assertEquals(listOf("low/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.NORMAL.bandwidth(metered = false)) { _, _ -> 0 }))
-        assertEquals(listOf("high/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.VERY_HIGH.bandwidth(metered = true)) { _, _ -> 0 }))
-        assertEquals(listOf("low/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.AUTO.bandwidth(metered = true)) { _, _ -> 0 }))
-        assertEquals(listOf("high/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.AUTO.bandwidth(metered = false)) { _, _ -> 0 }))
-        assertEquals(listOf("high/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.NORMAL.bandwidth(false)) { uri, _ -> if (uri.startsWith("high")) 5_000 else 0 }))
+        assertEquals(listOf("low/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.NORMAL_BANDWIDTH) { _, _ -> 0 }))
+        assertEquals(listOf("high/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.VERY_HIGH_BANDWIDTH) { _, _ -> 0 }))
+        assertEquals(listOf("high/audio.m3u8"), variantUris(selectVariant(master, AudioQuality.NORMAL_BANDWIDTH) { uri, _ -> if (uri.startsWith("high")) 5_000 else 0 }))
         assertEquals(listOf("low/audio.m3u8"), variantUris(selectVariant(master, 64_000) { _, _ -> 0 }))
-        assertEquals(AudioQuality.AUTO, AudioQuality.of("lossless"))
+    }
+
+    @Test fun qualityKeysReadOlderValuesAsTheConnectionDefault() {
+        assertEquals(AudioQuality.LOSSLESS, AudioQuality.of("lossless", AudioQuality.HIGH))
+        assertEquals(AudioQuality.LOW, AudioQuality.of("low", AudioQuality.HIGH))
+        // The keys of the earlier presets take the default of the connection they were set for.
+        assertEquals(AudioQuality.WifiDefault, AudioQuality.of("auto", AudioQuality.WifiDefault))
+        assertEquals(AudioQuality.MobileDefault, AudioQuality.of("very_high", AudioQuality.MobileDefault))
+        assertEquals(null, AudioQuality.HIGH.ceiling)
+        assertEquals(null, AudioQuality.LOSSLESS.ceiling)
     }
 
     @Test fun thumbnailsBecomeTheLargestCover() {

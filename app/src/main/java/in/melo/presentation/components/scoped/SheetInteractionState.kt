@@ -67,11 +67,8 @@ internal fun rememberSheetInteractionState(
         PlayerSheetDynamicShape(
             topRadiusProvider = overallSheetTopCornerRadiusProvider,
             bottomRadiusProvider = playerContentActualBottomRadiusProvider,
-            useCircularMiniPlayerCapsuleProvider = {
-                showPlayerContentArea &&
-                    currentSheetContentState == PlayerSheetState.COLLAPSED &&
-                    playerContentExpansionFraction.value < 0.01f
-            },
+            // The collapsed mini player is a rounded rectangle (MiniPlayerCorner), not a capsule.
+            useCircularMiniPlayerCapsuleProvider = { false },
             useSmoothShapeProvider = {
                 useSmoothCornersState.value &&
                     !isDraggingState.value &&

@@ -1,5 +1,7 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.ui.glass.MeloAlertDialog
+import `in`.melo.ui.glass.MeloSwitch
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -63,7 +65,7 @@ internal fun SpotifyPlaylistEditor(
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message }
     }
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(stringResource(if (playlist == null) R.string.spotify_playlist_new else R.string.spotify_playlist_edit)) },
         text = {
@@ -93,7 +95,7 @@ internal fun SpotifyPlaylistEditor(
                 if (!local) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(if (youTube) R.string.youtube_playlist_public else R.string.spotify_playlist_profile), Modifier.weight(1f))
-                        Switch(published, { published = it }, enabled = !busy && knownVisibility)
+                        MeloSwitch(published, { published = it }, enabled = !busy && knownVisibility)
                     }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -189,7 +191,7 @@ internal fun LocalPlaylistEditor(model: MeloModel, playlist: Music, onDismiss: (
     var error by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) { image = uri; removeCover = false } }
     val shown: Any? = image ?: if (removeCover) null else stored?.cover
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(stringResource(R.string.spotify_playlist_edit_local)) },
         text = {
@@ -251,7 +253,7 @@ internal fun YouTubePlaylistEditor(model: MeloModel, playlist: Music, onDismiss:
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: saveFailure }
     }
-    AlertDialog(
+    MeloAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(stringResource(R.string.youtube_playlist_edit)) },
         text = {
@@ -259,7 +261,7 @@ internal fun YouTubePlaylistEditor(model: MeloModel, playlist: Music, onDismiss:
                 OutlinedTextField(name, { name = it.take(150) }, label = { Text(stringResource(R.string.playlist_name)) }, singleLine = true, enabled = !busy)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.youtube_playlist_public), Modifier.weight(1f))
-                    Switch(public, { public = it }, enabled = !busy && known)
+                    MeloSwitch(public, { public = it }, enabled = !busy && known)
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (busy || !known && error == null) LinearProgressIndicator(Modifier.fillMaxWidth())

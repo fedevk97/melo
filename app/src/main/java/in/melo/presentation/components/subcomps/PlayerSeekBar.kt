@@ -33,7 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import `in`.melo.presentation.components.WavySliderExpressive
+import `in`.melo.presentation.components.MeloScrubber
 import `in`.melo.utils.formatDuration
 import kotlin.math.roundToLong
 
@@ -98,7 +98,7 @@ fun PlayerSeekBar(
 //            color = onBackgroundColor,
 //            fontSize = 12.sp
 //        )
-        WavySliderExpressive(
+        MeloScrubber(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 0.dp),
@@ -122,13 +122,8 @@ fun PlayerSeekBar(
                 lastSeekFinishedTime = System.currentTimeMillis()
                 isUserSeeking = false
             },
-            strokeWidth = 5.dp, // Was trackHeight
-            thumbRadius = 8.dp,
             activeTrackColor = primaryColor,
             inactiveTrackColor = primaryColor.copy(alpha = 0.2f),
-            thumbColor = primaryColor,
-            wavelength = 30.dp, // Was waveLength
-            isPlaying = isPlaying,
             semanticsLabel = "Playback position"
         )
 //        Text(

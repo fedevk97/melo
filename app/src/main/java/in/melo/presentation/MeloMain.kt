@@ -1,5 +1,6 @@
 package `in`.melo.presentation
 
+import `in`.melo.presentation.components.ambientBlobs
 import `in`.melo.ui.theme.MeloLayout
 import android.graphics.RenderEffect as AndroidRenderEffect
 import android.graphics.Shader as AndroidShader
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import `in`.melo.ui.glass.backdrop.backdrops.layerBackdrop
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -75,6 +77,7 @@ import `in`.melo.presentation.components.sanitizeNavigationBarBottomInset
 import `in`.melo.presentation.navigation.AppNavigation
 import `in`.melo.presentation.navigation.openMusic
 import `in`.melo.presentation.navigation.Screen
+import `in`.melo.presentation.navigation.navigateToTopLevelSafely
 import `in`.melo.presentation.screens.AccountScreen
 import `in`.melo.presentation.utils.AppHapticsConfig
 import `in`.melo.presentation.utils.LocalAppHapticsConfig
@@ -163,7 +166,7 @@ fun MeloMain(model: MeloModel, pendingSharedLink: String? = null, onSharedLinkHa
     var isSearchBarActive by remember { mutableStateOf(false) }
     val routesWithHiddenNavigationBar = remember {
         setOf(Screen.Settings.route, Screen.Equalizer.route, Screen.SettingsCategory.route, Screen.PlaylistDetail.route, Screen.AlbumDetail.route,
-            Screen.ArtistDetail.route, Screen.PodcastDetail.route, Screen.Convert.route, Screen.GoogleSignIn.route)
+            Screen.ArtistDetail.route, Screen.PodcastDetail.route, Screen.Convert.route, Screen.GoogleSignIn.route, Screen.DiscordLogin.route)
     }
     val shouldHideNavigationBar by remember(currentRoute, isSearchBarActive) {
         derivedStateOf {
@@ -184,7 +187,7 @@ fun MeloMain(model: MeloModel, pendingSharedLink: String? = null, onSharedLinkHa
         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     )
     val horizontalPadding = if (navBarStyle == NavBarStyle.DEFAULT) {
-        if (systemNavBarInset > 30.dp) 14.dp else systemNavBarInset
+        if (systemNavBarInset > 30.dp) 16.dp else systemNavBarInset
     } else {
         0.dp
     }
@@ -225,13 +228,69 @@ fun MeloMain(model: MeloModel, pendingSharedLink: String? = null, onSharedLinkHa
     LaunchedEffect(hapticsEnabled, rootView) { rootView.rootView?.isHapticFeedbackEnabled = hapticsEnabled }
     val scopedHaptics = remember(platformHaptics, hapticsEnabled) { if (hapticsEnabled) platformHaptics else NoOpHapticFeedback }
     CompositionLocalProvider(
-        `in`.melo.presentation.components.LocalSurfaceGradients provides settings.surfaceGradients,
-        `in`.melo.presentation.components.LocalHomePressMotion provides settings.homePressMotion,
         LocalAppHapticsConfig provides remember(hapticsEnabled) { AppHapticsConfig(enabled = hapticsEnabled) },
         LocalHapticFeedback provides scopedHaptics,
     ) {
+    // The pages, recorded with the window colour under them, for the glass bars and menus to sample.
+    val windowBackground = MaterialTheme.colorScheme.background
+    val paintBackdrop: androidx.compose.ui.graphics.drawscope.ContentDrawScope.() -> Unit = remember(windowBackground) {
+        { drawRect(windowBackground); drawContent() }
+    }
+    val appBackdrop = `in`.melo.ui.glass.backdrop.backdrops.rememberLayerBackdrop(onDraw = paintBackdrop)
+    // The whole screen as it shows (the pages, the bars and the player over them), for the menus
+    // and sheets in windows of their own: one opened from Now Playing then has the player under
+    // its glass, not the pages the player covers. Nothing in this window samples it.
+    val screenBackdrop = `in`.melo.ui.glass.backdrop.backdrops.rememberLayerBackdrop(onDraw = paintBackdrop)
+    val surfaceStyle = `in`.melo.ui.glass.LocalMeloSurface.current.style
+    val recordBackdrop = surfaceStyle != `in`.melo.ui.glass.MeloSurfaceStyle.SOLID && `in`.melo.ui.glass.isGlassSupported()
+    // The colour background: soft blobs in the playing song's colour (the colour of the chosen
+    // app icon with nothing playing, first launch included) behind every page, inside the layer the glass bars sample,
+    // so the bars pick the colour up too. The selected tab takes the same colour.
+    val ambientOn = settings.ambientBackground
+    val playingArt by remember {
+        playerViewModel.stablePlayerState.map { it.currentSong?.albumArtUriString }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
+    // The playing song's one accent (its cover's most colourful swatch,
+    // made readable) is what the app wears. It is the blobs' main colour, with the cover's most
+    // common colour beside it, and the selected tab's and the mini player's. With nothing
+    // playing the blobs take the app icon's colour and the chrome takes their accent.
+    val ambientDark = `in`.melo.ui.theme.LocalMeloDarkTheme.current
+    val nowPlayingTint = `in`.melo.ui.theme.rememberNowPlayingTint(playingArt, ambientDark)
+    val ambientSongTint = nowPlayingTint.takeIf { ambientOn && playingArt != null }
+    val ambientArtColors = if (ambientSongTint != null) {
+        `in`.melo.presentation.components.player.rememberMeshPalette(playingArt).colors
+    } else null
+    val appIconContext = androidx.compose.ui.platform.LocalContext.current
+    val appIcon by remember(appIconContext) { `in`.melo.data.AppIcon.live(appIconContext) }.collectAsStateWithLifecycle()
+    val ambientPrimary = ambientSongTint ?: (appIcon ?: `in`.melo.data.AppIcon.Default).ambient
+    val ambientSecondary = if (ambientSongTint != null && !ambientArtColors.isNullOrEmpty()) {
+        ambientArtColors[0]
+    } else `in`.melo.presentation.components.ambientCompanion(ambientPrimary)
+    val ambientBlobs = if (ambientOn) {
+        `in`.melo.presentation.components.rememberAmbientBlobs(
+            primary = ambientPrimary,
+            secondary = ambientSecondary,
+            animate = !`in`.melo.presentation.utils.LocalReducedMotion.current && appInForeground,
+            dark = ambientDark,
+        )
+    } else null
+    // The chrome's accent while the colour background is on in Melo's own colour; while the
+    // blobs follow the song they already are its accent, so the chrome takes the song's tint.
+    val brandAccent = `in`.melo.presentation.components.rememberAmbientAccent(
+        ambientPrimary,
+        on = ambientOn && ambientSongTint == null,
+        dark = ambientDark,
+    )
+    CompositionLocalProvider(
+        `in`.melo.ui.glass.LocalAppBackdrop provides if (recordBackdrop) appBackdrop else null,
+        `in`.melo.ui.glass.LocalPopupBackdrop provides if (recordBackdrop) screenBackdrop else null,
+        `in`.melo.presentation.components.LocalAmbientBackground provides ambientOn,
+        `in`.melo.presentation.components.LocalAmbientAccent provides if (ambientOn) brandAccent ?: nowPlayingTint else null,
+        `in`.melo.ui.theme.LocalNowPlayingTint provides nowPlayingTint,
+    ) {
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize()
+            .then(if (recordBackdrop) Modifier.layerBackdrop(screenBackdrop) else Modifier),
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             if (shouldRenderNavigationBar) {
@@ -357,13 +416,18 @@ fun MeloMain(model: MeloModel, pendingSharedLink: String? = null, onSharedLinkHa
                             }
                         }
                     }
+                    .then(if (recordBackdrop) Modifier.layerBackdrop(appBackdrop) else Modifier)
             ) {
-                AppNavigation(
-                    model = model,
-                    navController = navController,
-                    paddingValues = innerPadding,
-                    onSearchBarActiveChange = { isSearchBarActive = it },
-                )
+                Box(Modifier.fillMaxSize().ambientBlobs(ambientBlobs))
+                // Nothing inside the recorded pages samples them: a surface can't blur the layer it is drawn into.
+                CompositionLocalProvider(`in`.melo.ui.glass.LocalAppBackdrop provides null) {
+                    AppNavigation(
+                        model = model,
+                        navController = navController,
+                        paddingValues = innerPadding,
+                        onSearchBarActiveChange = { isSearchBarActive = it },
+                    )
+                }
             }
 
             val isExpandedOrExpanding by remember {
@@ -421,6 +485,11 @@ fun MeloMain(model: MeloModel, pendingSharedLink: String? = null, onSharedLinkHa
                 )
             }
         }
+    }
+    // The first-run screens, over the whole app; the tour's Library step shows the Library tab behind its card.
+    `in`.melo.presentation.components.onboarding.OnboardingHost { library ->
+        navController.navigateToTopLevelSafely(if (library) Screen.Library.route else Screen.Home.route)
+    }
     }
     }
 }

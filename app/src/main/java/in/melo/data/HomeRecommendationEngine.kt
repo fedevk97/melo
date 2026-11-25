@@ -36,7 +36,7 @@ object HomeRecommendationEngine {
     private data class RankedArtist(val browseId: String, val name: String, val score: Double)
     private enum class MixKind { SUPERMIX, DISCOVER, NEW_RELEASE }
 
-    /** Full Dial ordering: newest release first, with the other recommendation cards reshuffled. */
+    /** Full ordering: newest release first, with the other recommendation cards reshuffled. */
     suspend fun build(
         history: List<HomeHistoryTrack>,
         mixedForYou: List<Music>,

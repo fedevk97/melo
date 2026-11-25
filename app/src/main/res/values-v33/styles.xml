@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 13 and up: the M splash on every launch, not only from the launcher. -->
+    <style name="Theme.Melo" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0B0B0B</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowSplashScreenBackground">#0B0B0B</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="android:windowSplashScreenAnimationDuration">1070</item>
+        <item name="android:windowSplashScreenBehavior">icon_preferred</item>
+    </style>
+    <style name="Theme.Melo.Ice">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo_ice</item>
+    </style>
+    <style name="Theme.Melo.Amethyst">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo_amethyst</item>
+    </style>
+    <style name="Theme.Melo.Emerald">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo_emerald</item>
+    </style>
+    <style name="Theme.Melo.Mono">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo_mono</item>
+    </style>
+</resources>

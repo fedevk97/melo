@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloAlpha
 import `in`.melo.ui.theme.MeloLayout
 import androidx.compose.animation.core.Animatable
@@ -14,8 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -85,7 +84,7 @@ fun DismissUndoBar(
                         contentColor = MaterialTheme.colorScheme.primary,
                     )
                     MeloIconButton(
-                        icon = Icons.Rounded.Close,
+                        icon = MeloIcons.Close,
                         contentDescription = stringResource(R.string.common_close),
                         onClick = onClose,
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,

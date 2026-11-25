@@ -1,16 +1,12 @@
 package `in`.melo.presentation.screens
 
+import `in`.melo.ui.glass.MeloSwitch
+import `in`.melo.presentation.icons.MeloIcons
+import `in`.melo.presentation.icons.meloPainter
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.SignalCellularAlt
-import androidx.compose.material.icons.rounded.Wifi
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SwipeLeft
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import `in`.melo.presentation.components.TrackSwipeAction
 
 import android.widget.Toast
@@ -32,65 +28,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.ui.res.painterResource
-import androidx.compose.material.icons.rounded.Restore
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.outlined.Style
-import androidx.compose.material.icons.outlined.PlayCircle
-import androidx.compose.material.icons.rounded.UnfoldMore
-import androidx.compose.material.icons.rounded.BlurOff
-import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.rounded.Logout
-import androidx.compose.material.icons.rounded.Backup
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.Forum
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlin.math.roundToInt
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -108,6 +73,8 @@ import `in`.melo.MeloModel
 import `in`.melo.data.UsageAnalytics
 import `in`.melo.data.preferences.AlbumArtPaletteStyle
 import `in`.melo.data.preferences.AppSettings
+import `in`.melo.data.preferences.lyricsProviderList
+import `in`.melo.data.preferences.withLyricsProvider
 import `in`.melo.data.preferences.CarouselStyle
 import `in`.melo.data.preferences.CollagePattern
 import `in`.melo.data.preferences.NavBarStyle
@@ -123,22 +90,20 @@ import `in`.melo.ui.theme.MeloLayout
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun SettingsScaffold(title: String, navController: NavHostController, content: @Composable ColumnScope.() -> Unit) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+internal fun SettingsScaffold(title: String, navController: NavHostController, content: @Composable ColumnScope.() -> Unit) {
+    `in`.melo.presentation.components.MeloPageScaffold(
         topBar = {
             TopAppBar(
+                colors = `in`.melo.presentation.components.meloPageBarColors(),
                 title = { Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp)) },
                 navigationIcon = {
                     MeloIconButton(
-                        icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                        icon = MeloIcons.ArrowBack,
                         contentDescription = stringResource(R.string.common_back),
                         onClick = { navController.popBackStack() },
                         modifier = Modifier.padding(start = MeloLayout.Space2),
                     )
                 },
-                scrollBehavior = scrollBehavior,
             )
         }
     ) { inner ->
@@ -151,7 +116,7 @@ private fun SettingsScaffold(title: String, navController: NavHostController, co
                 .padding(PaddingValues(start = MeloLayout.PageGutter, end = MeloLayout.PageGutter, top = MeloLayout.Space2,
                     bottom = MeloLayout.Space8 + `in`.melo.presentation.components.MiniPlayerHeight +
                         androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())),
-            verticalArrangement = Arrangement.spacedBy(MeloLayout.Space3),
+            verticalArrangement = Arrangement.spacedBy(MeloLayout.Space6),
             content = content,
         )
     }
@@ -163,65 +128,91 @@ private fun CategoryRow(title: String, subtitle: String, icon: ImageVector, onCl
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
     ) {
-        Row(Modifier.padding(horizontal = MeloLayout.PageGutter, vertical = MeloLayout.Space3), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(MeloLayout.ControlVisual).meloPanel(MeloLayout.CardShape), contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(MeloLayout.IconDefault), tint = MaterialTheme.colorScheme.onSurface)
-            }
-            Column(Modifier.weight(1f).padding(horizontal = MeloLayout.PageGutter)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
-        }
+        SettingsRow(
+            title = title,
+            subtitle = subtitle,
+            leadingIcon = { Icon(icon, null, Modifier.size(MeloLayout.IconDefault), tint = MaterialTheme.colorScheme.onSurface) },
+        ) { SettingsChevron() }
     }
 }
+
 
 @Composable
 fun SettingsScreen(model: MeloModel, navController: NavHostController) {
     val settings by model.ui.settings.collectAsStateWithLifecycle()
+    val discovery by model.discovery.collectAsStateWithLifecycle()
+    val google by model.youTubeAccount.collectAsStateWithLifecycle()
+    val spotifyProfile by model.spotifyAccountProfile.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    fun open(id: String) = navController.navigateSafely(Screen.SettingsCategory.createRoute(id))
     SettingsScaffold(stringResource(R.string.common_settings), navController) {
-        SwitchSettingItem(stringResource(R.string.offline_mode_title), stringResource(R.string.offline_mode_description), settings.offlineMode,
-            { enabled -> model.ui.updateSettings { it.copy(offlineMode = enabled) } },
-            leadingIcon = { Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.secondary) })
-        fun open(id: String) = navController.navigateSafely(Screen.SettingsCategory.createRoute(id))
-        CategoryRow(stringResource(R.string.settings_category_appearance_title), stringResource(R.string.settings_category_appearance_subtitle), Icons.Rounded.Palette) { open("appearance") }
-        CategoryRow(stringResource(R.string.settings_home_title), stringResource(R.string.settings_home_subtitle), Icons.Rounded.Home) { open("home") }
-        CategoryRow(stringResource(R.string.settings_pages_title), stringResource(R.string.settings_pages_subtitle), Icons.Rounded.Tune) { open("pages") }
-        CategoryRow(stringResource(R.string.settings_category_playback_title), stringResource(R.string.settings_category_playback_subtitle), Icons.Rounded.MusicNote) { open("playback") }
-        CategoryRow(stringResource(R.string.settings_category_behavior_title), stringResource(R.string.settings_category_behavior_subtitle), Icons.Rounded.TouchApp) { open("behavior") }
-        CategoryRow(stringResource(R.string.settings_category_equalizer_title), stringResource(R.string.settings_category_equalizer_subtitle), Icons.Rounded.GraphicEq) { navController.navigateSafely(Screen.Equalizer.route) }
-        CategoryRow(stringResource(R.string.settings_storage_title), stringResource(R.string.settings_storage_subtitle), Icons.Rounded.Storage) { open("storage") }
-        CategoryRow(stringResource(R.string.settings_category_backup_title), stringResource(R.string.settings_category_backup_subtitle), Icons.Rounded.Backup) { open("backup") }
-        val discovery by model.discovery.collectAsStateWithLifecycle()
-        val google by model.youTubeAccount.collectAsStateWithLifecycle()
-        CategoryRow(stringResource(R.string.settings_accounts_title),
-            listOfNotNull(stringResource(R.string.search_source_spotify).takeIf { discovery.spotifyEnabled },
-                stringResource(R.string.search_source_youtube).takeIf { google != null })
-                .joinToString(" · ").ifEmpty { stringResource(R.string.settings_account_guest_subtitle) },
-            Icons.AutoMirrored.Rounded.Logout) { open("account") }
-        val context = LocalContext.current
-        CategoryRow(stringResource(R.string.update_settings_title),
-            stringResource(R.string.update_installed, `in`.melo.BuildConfig.VERSION_NAME),
-            Icons.Rounded.Download) { `in`.melo.update.AppUpdater.get(context).check(manual = true) }
-        CategoryRow(stringResource(R.string.settings_discord_title), stringResource(R.string.settings_discord_subtitle),
-            Icons.Rounded.Forum) {
-            runCatching {
-                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
-                    android.net.Uri.parse("https://discord.gg/h3Hzk4seXj")))
-            }
+        // Settings open on who is signed in, then the switch used most, then the pages from the
+        // everyday ones to the rarely visited ones.
+        `in`.melo.presentation.components.MeloGroupedList {
+            val services = listOfNotNull(
+                stringResource(R.string.search_source_spotify).takeIf { discovery.spotifyEnabled },
+                stringResource(R.string.search_source_youtube).takeIf { google != null },
+            ).joinToString(" · ")
+            val spotify = spotifyProfile.takeIf { discovery.spotifyEnabled }
+            SettingsAccountRow(
+                title = spotify?.displayName ?: google?.name ?: stringResource(R.string.settings_accounts_title),
+                subtitle = services.ifEmpty { stringResource(R.string.settings_account_guest_subtitle) },
+                picture = { AccountPicture(spotify?.imageUrl ?: google?.photoUrl) },
+                onClick = { open("account") },
+            )
         }
-        CategoryRow(stringResource(R.string.diagnostics_title), stringResource(R.string.diagnostics_subtitle),
-            Icons.Rounded.BugReport) { open("diagnostics") }
-        CategoryRow(stringResource(R.string.settings_privacy_title), stringResource(R.string.settings_privacy_subtitle),
-            Icons.Rounded.Lock) { open("privacy") }
+        `in`.melo.presentation.components.MeloGroupedList {
+            SwitchSettingItem(stringResource(R.string.offline_mode_title), stringResource(R.string.offline_mode_description), settings.offlineMode,
+                { enabled -> model.ui.updateSettings { it.copy(offlineMode = enabled) } },
+                leadingIcon = { Icon(MeloIcons.Download, null, tint = MaterialTheme.colorScheme.onSurface) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_group_look)) {
+            CategoryRow(stringResource(R.string.settings_category_appearance_title), stringResource(R.string.settings_category_appearance_subtitle), MeloIcons.Palette) { open("appearance") }
+            CategoryRow(stringResource(R.string.settings_home_title), stringResource(R.string.settings_home_subtitle), MeloIcons.Home) { open("home") }
+            CategoryRow(stringResource(R.string.settings_pages_title), stringResource(R.string.settings_pages_subtitle), MeloIcons.Tune) { open("pages") }
+        }
+        SettingsSection(title = stringResource(R.string.settings_group_listening)) {
+            CategoryRow(stringResource(R.string.settings_category_playback_title), stringResource(R.string.settings_category_playback_subtitle), MeloIcons.MusicNote) { open("playback") }
+            CategoryRow(stringResource(R.string.settings_addons_title), stringResource(R.string.settings_addons_subtitle), MeloIcons.Link) { open("addons") }
+            CategoryRow(stringResource(R.string.settings_storage_title), stringResource(R.string.settings_storage_subtitle), MeloIcons.Storage) { open("storage") }
+        }
+        SettingsSection(title = stringResource(R.string.settings_group_app)) {
+            CategoryRow(stringResource(R.string.settings_category_behavior_title), stringResource(R.string.settings_category_behavior_subtitle), MeloIcons.Settings) { open("behavior") }
+            CategoryRow(stringResource(R.string.discord), stringResource(R.string.discord_settings_subtitle),
+                androidx.compose.ui.graphics.vector.ImageVector.vectorResource(R.drawable.ic_discord)) { open("discord") }
+            CategoryRow(stringResource(R.string.settings_privacy_title), stringResource(R.string.settings_privacy_subtitle),
+                MeloIcons.Lock) { open("privacy") }
+            CategoryRow(stringResource(R.string.settings_category_backup_title), stringResource(R.string.settings_category_backup_subtitle), MeloIcons.Backup) { open("backup") }
+        }
+        SettingsSection(title = stringResource(R.string.settings_group_about)) {
+            CategoryRow(stringResource(R.string.update_settings_title),
+                stringResource(R.string.update_installed, `in`.melo.BuildConfig.VERSION_NAME),
+                MeloIcons.Download) { `in`.melo.update.AppUpdater.get(context).check(manual = true) }
+            CategoryRow(stringResource(R.string.settings_discord_title), stringResource(R.string.settings_discord_subtitle),
+                MeloIcons.Forum) {
+                runCatching {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://discord.gg/h3Hzk4seXj")))
+                }
+            }
+            CategoryRow(stringResource(R.string.diagnostics_title), stringResource(R.string.diagnostics_subtitle),
+                MeloIcons.BugReport) { open("diagnostics") }
+        }
     }
+}
+
+/** A signed-in account's picture filling its circle, or a person glyph when there is none. */
+@Composable
+private fun AccountPicture(url: String?) {
+    if (url != null) coil.compose.AsyncImage(url, null, Modifier.fillMaxSize().clip(CircleShape),
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+    else Icon(MeloIcons.Person, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
 fun SettingsCategoryScreen(model: MeloModel, navController: NavHostController, category: String) {
     when (category) {
         "appearance" -> AppearanceSettings(model, navController)
-        "advanced" -> AdvancedAppearanceSettings(model, navController)
         "playback" -> PlaybackSettings(model, navController)
         "behavior" -> BehaviorSettings(model, navController)
         "storage" -> StorageSettings(model, navController)
@@ -232,6 +223,8 @@ fun SettingsCategoryScreen(model: MeloModel, navController: NavHostController, c
         "pages" -> PageActionsSettings(model, navController)
         "diagnostics" -> DiagnosticsSettings(model, navController)
         "privacy" -> PrivacySettings(model, navController)
+        "discord" -> DiscordSettings(model, navController)
+        "addons" -> AddonsSettings(model, navController)
     }
 }
 
@@ -240,6 +233,7 @@ private fun PrivacySettings(model: MeloModel, navController: NavHostController) 
     val settings by model.ui.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     SettingsScaffold(stringResource(R.string.settings_privacy_title), navController) {
+        `in`.melo.presentation.components.MeloGroupedList {
         SwitchSettingItem(
             title = stringResource(R.string.settings_analytics_title),
             subtitle = stringResource(R.string.settings_analytics_subtitle),
@@ -248,31 +242,25 @@ private fun PrivacySettings(model: MeloModel, navController: NavHostController) 
                 model.ui.updateSettings { it.copy(analyticsEnabled = enabled) }
                 UsageAnalytics.setEnabled(context, enabled)
             },
-            leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.secondary) },
+            leadingIcon = { Icon(MeloIcons.Lock, null, tint = MaterialTheme.colorScheme.secondary) },
         )
+        }
         PrivacyPolicyLink()
     }
 }
 
+/** How Melo looks: the theme, the player, lists, the navigation bar and the lyrics screen. */
 @Composable
 private fun AppearanceSettings(model: MeloModel, navController: NavHostController) {
     val ui = model.ui
     val s by ui.settings.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val update = ui::updateSettings
     SettingsScaffold(stringResource(R.string.settings_category_appearance_title), navController) {
-        SettingsSection(title = stringResource(R.string.settings_global_theme_section), icon = {}) {
-            ThemeSelectorItem(
-                label = stringResource(R.string.settings_app_language_title),
-                description = stringResource(R.string.settings_app_language_subtitle),
-                options = mapOf(
-                    AppSettings.LANGUAGE_SYSTEM to stringResource(R.string.settings_language_system),
-                    "fr" to "Français", "en" to "English",
-                ),
-                selectedKey = s.language,
-                onSelectionChanged = { key -> update { it.copy(language = key) }; AppLocales.apply(context, key) },
-                leadingIcon = { Icon(Icons.Outlined.Language, null, tint = MaterialTheme.colorScheme.secondary) },
-            )
+        SettingsSection(
+            title = stringResource(R.string.settings_app_icon_title),
+            footer = stringResource(R.string.settings_app_icon_footer),
+        ) { AppIconPicker() }
+        SettingsSection(title = stringResource(R.string.settings_section_theme)) {
             ThemeSelectorItem(
                 label = stringResource(R.string.settings_app_theme_title),
                 description = stringResource(R.string.settings_app_theme_subtitle),
@@ -283,29 +271,25 @@ private fun AppearanceSettings(model: MeloModel, navController: NavHostControlle
                 ),
                 selectedKey = s.themeMode,
                 onSelectionChanged = { key -> update { it.copy(themeMode = key) } },
-                leadingIcon = { Icon(Icons.Outlined.LightMode, null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(MeloIcons.LightMode, null, tint = MaterialTheme.colorScheme.secondary) },
             )
-            SwitchSettingItem(stringResource(R.string.settings_surface_gradients_title), stringResource(R.string.settings_surface_gradients_subtitle), s.surfaceGradients, { v -> update { it.copy(surfaceGradients = v) } }, leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.home_gradients_setting), stringResource(R.string.home_gradients_setting_subtitle), s.homeGradients, { v -> update { it.copy(homeGradients = v) } }, leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.home_press_motion_setting), stringResource(R.string.settings_touch_motion_subtitle), s.homePressMotion, { v -> update { it.copy(homePressMotion = v) } }, leadingIcon = { Icon(Icons.Rounded.TouchApp, null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.home_loading_animation_setting), stringResource(R.string.home_loading_animation_subtitle), s.homeLoadingAnimations, { v -> update { it.copy(homeLoadingAnimations = v) } }, leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.settings_show_scrollbar_title), stringResource(R.string.settings_show_scrollbar_subtitle), s.showScrollbar, { v -> update { it.copy(showScrollbar = v) } }, leadingIcon = { Icon(Icons.Rounded.UnfoldMore, null, tint = MaterialTheme.colorScheme.secondary) })
-        }
-        CategoryRow(stringResource(R.string.melo_advanced), stringResource(R.string.melo_advanced_description), Icons.Rounded.Tune) {
-            navController.navigateSafely(Screen.SettingsCategory.createRoute("advanced"))
-        }
-        SettingsSection(title = stringResource(R.string.settings_lists_section), icon = {}) {
-            SwitchSettingItem(stringResource(R.string.settings_compact_lists_title), stringResource(R.string.settings_compact_lists_subtitle), s.compactLists, { v -> update { it.copy(compactLists = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_view_week_24), null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.settings_source_badges_title), stringResource(R.string.settings_source_badges_subtitle), s.showSourceBadges, { v -> update { it.copy(showSourceBadges = v) } }, leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) })
-        }
-        SettingsSection(title = stringResource(R.string.settings_now_playing_section), icon = {}) {
-            SwitchSettingItem(
-                stringResource(R.string.settings_player_artwork_gradient_title),
-                stringResource(R.string.settings_player_artwork_gradient_subtitle),
-                s.playerArtworkGradient,
-                { value -> update { it.copy(playerArtworkGradient = value) } },
-                leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) },
+            ThemeSelectorItem(
+                label = stringResource(R.string.settings_app_style_title),
+                description = stringResource(R.string.settings_app_style_subtitle),
+                options = mapOf(
+                    `in`.melo.ui.glass.MeloSurfaceStyle.GLASS.key to stringResource(R.string.settings_app_style_glass),
+                    `in`.melo.ui.glass.MeloSurfaceStyle.FROST.key to stringResource(R.string.settings_app_style_frost),
+                    `in`.melo.ui.glass.MeloSurfaceStyle.SOLID.key to stringResource(R.string.settings_app_style_solid),
+                ),
+                selectedKey = s.surfaceStyle,
+                onSelectionChanged = { key -> update { it.copy(surfaceStyle = key) } },
+                leadingIcon = { Icon(MeloIcons.Tab, null, tint = MaterialTheme.colorScheme.secondary) },
             )
+            if (s.surfaceStyle == `in`.melo.ui.glass.MeloSurfaceStyle.GLASS.key) GlassOptionSliders(s, update)
+            SwitchSettingItem(stringResource(R.string.settings_ambient_background_title), stringResource(R.string.settings_ambient_background_subtitle), s.ambientBackground, { v -> update { it.copy(ambientBackground = v) } }, leadingIcon = { Icon(MeloIcons.ColorPalette, null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_disable_blur_all_over_title), stringResource(R.string.settings_disable_blur_all_over_subtitle), s.disableBlur, { v -> update { it.copy(disableBlur = v) } }, leadingIcon = { Icon(MeloIcons.BlurOff, null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_now_playing_section)) {
             ThemeSelectorItem(
                 label = stringResource(R.string.settings_player_theme_title),
                 description = stringResource(R.string.settings_player_theme_subtitle),
@@ -315,7 +299,7 @@ private fun AppearanceSettings(model: MeloModel, navController: NavHostControlle
                 ),
                 selectedKey = s.playerTheme,
                 onSelectionChanged = { key -> update { it.copy(playerTheme = key) } },
-                leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(MeloIcons.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) },
             )
             ThemeSelectorItem(
                 label = stringResource(R.string.settings_album_art_palette_title),
@@ -323,7 +307,53 @@ private fun AppearanceSettings(model: MeloModel, navController: NavHostControlle
                 options = AlbumArtPaletteStyle.entries.associate { it.storageKey to it.label },
                 selectedKey = s.palette,
                 onSelectionChanged = { key -> update { it.copy(palette = key) } },
-                leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(MeloIcons.Artwork, null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+            SwitchSettingItem(
+                stringResource(R.string.settings_player_artwork_gradient_title),
+                stringResource(R.string.settings_player_artwork_gradient_subtitle),
+                s.playerArtworkGradient,
+                { value -> update { it.copy(playerArtworkGradient = value) } },
+                leadingIcon = { Icon(MeloIcons.Gradient, null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+            SwitchSettingItem(
+                stringResource(R.string.settings_full_screen_cover_art_title),
+                stringResource(R.string.settings_full_screen_cover_art_subtitle),
+                s.fullScreenCoverArt,
+                { value -> update { it.copy(fullScreenCoverArt = value) } },
+                leadingIcon = { Icon(meloPainter(R.drawable.rounded_fullscreen_24), null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+            SwitchSettingItem(
+                stringResource(R.string.settings_album_cover_mix_title),
+                stringResource(R.string.settings_album_cover_mix_subtitle),
+                s.albumCoverMix,
+                { value -> update { it.copy(albumCoverMix = value) } },
+                leadingIcon = { Icon(MeloIcons.Album, null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+            if (s.playerArtworkGradient) {
+                ThemeSelectorItem(
+                    label = stringResource(R.string.settings_player_backdrop_title),
+                    description = stringResource(R.string.settings_player_backdrop_subtitle),
+                    options = mapOf(
+                        AppSettings.BACKDROP_BLEND to stringResource(R.string.settings_player_backdrop_blend),
+                        AppSettings.BACKDROP_MESH to stringResource(R.string.settings_player_backdrop_mesh),
+                    ),
+                    selectedKey = s.playerBackdropStyle,
+                    onSelectionChanged = { key -> update { it.copy(playerBackdropStyle = key) } },
+                    leadingIcon = { Icon(MeloIcons.Backdrop, null, tint = MaterialTheme.colorScheme.secondary) },
+                )
+            }
+            ThemeSelectorItem(
+                label = stringResource(R.string.settings_player_progress_title),
+                description = stringResource(R.string.settings_player_progress_subtitle),
+                options = mapOf(
+                    AppSettings.PROGRESS_PLAIN to stringResource(R.string.settings_player_progress_plain),
+                    AppSettings.PROGRESS_GLOW to stringResource(R.string.settings_player_progress_glow),
+                    AppSettings.PROGRESS_WAVE to stringResource(R.string.settings_player_progress_wave),
+                ),
+                selectedKey = s.playerProgressStyle,
+                onSelectionChanged = { key -> update { it.copy(playerProgressStyle = key) } },
+                leadingIcon = { Icon(MeloIcons.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) },
             )
             ThemeSelectorItem(
                 label = stringResource(R.string.settings_carousel_style_title),
@@ -335,24 +365,18 @@ private fun AppearanceSettings(model: MeloModel, navController: NavHostControlle
                 ),
                 selectedKey = s.carouselStyle,
                 onSelectionChanged = { key -> update { it.copy(carouselStyle = key) } },
-                leadingIcon = { Icon(painterResource(R.drawable.rounded_view_carousel_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(meloPainter(R.drawable.rounded_view_carousel_24), null, tint = MaterialTheme.colorScheme.secondary) },
             )
-            SwitchSettingItem(stringResource(R.string.settings_show_player_file_info_title), stringResource(R.string.settings_show_player_file_info_subtitle), s.showPlayerFileInfo, { v -> update { it.copy(showPlayerFileInfo = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_attach_file_24), null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.settings_quality_lists_title), stringResource(R.string.settings_quality_lists_subtitle), s.showQualityInLists, { v -> update { it.copy(showQualityInLists = v) } }, leadingIcon = { Icon(painterResource(R.drawable.outline_high_quality_24), null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.settings_player_menu_title), stringResource(R.string.settings_player_menu_subtitle), s.showPlayerMenuButton, { v -> update { it.copy(showPlayerMenuButton = v) } }, leadingIcon = { Icon(Icons.Rounded.MoreVert, null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_show_player_file_info_title), stringResource(R.string.settings_show_player_file_info_subtitle), s.showPlayerFileInfo, { v -> update { it.copy(showPlayerFileInfo = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_attach_file_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_player_menu_title), stringResource(R.string.settings_player_menu_subtitle), s.showPlayerMenuButton, { v -> update { it.copy(showPlayerMenuButton = v) } }, leadingIcon = { Icon(MeloIcons.MoreVert, null, tint = MaterialTheme.colorScheme.secondary) })
         }
-        SettingsSection(title = stringResource(R.string.settings_home_collage_section), icon = {}) {
-            ThemeSelectorItem(
-                label = stringResource(R.string.settings_collage_pattern_title),
-                description = stringResource(R.string.settings_collage_pattern_subtitle),
-                options = CollagePattern.entries.associate { it.storageKey to it.label },
-                selectedKey = s.collagePattern,
-                onSelectionChanged = { key -> update { it.copy(collagePattern = key) } },
-                leadingIcon = { Icon(painterResource(R.drawable.rounded_view_column_24), null, tint = MaterialTheme.colorScheme.secondary) },
-            )
-            SwitchSettingItem(stringResource(R.string.settings_auto_rotate_patterns_title), stringResource(R.string.settings_auto_rotate_patterns_subtitle), s.collageAutoRotate, { v -> update { it.copy(collageAutoRotate = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        SettingsSection(title = stringResource(R.string.settings_lists_section)) {
+            SwitchSettingItem(stringResource(R.string.settings_compact_lists_title), stringResource(R.string.settings_compact_lists_subtitle), s.compactLists, { v -> update { it.copy(compactLists = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_view_week_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_source_badges_title), stringResource(R.string.settings_source_badges_subtitle), s.showSourceBadges, { v -> update { it.copy(showSourceBadges = v) } }, leadingIcon = { Icon(MeloIcons.Tag, null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_quality_lists_title), stringResource(R.string.settings_quality_lists_subtitle), s.showQualityInLists, { v -> update { it.copy(showQualityInLists = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.outline_high_quality_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_show_scrollbar_title), stringResource(R.string.settings_show_scrollbar_subtitle), s.showScrollbar, { v -> update { it.copy(showScrollbar = v) } }, leadingIcon = { Icon(MeloIcons.UnfoldMore, null, tint = MaterialTheme.colorScheme.secondary) })
         }
-        SettingsSection(title = stringResource(R.string.settings_navigation_bar_section), icon = {}) {
+        SettingsSection(title = stringResource(R.string.settings_navigation_bar_section)) {
             ThemeSelectorItem(
                 label = stringResource(R.string.settings_navbar_style_title),
                 description = stringResource(R.string.settings_navbar_style_subtitle),
@@ -362,9 +386,101 @@ private fun AppearanceSettings(model: MeloModel, navController: NavHostControlle
                 ),
                 selectedKey = s.navBarStyle,
                 onSelectionChanged = { key -> update { it.copy(navBarStyle = key) } },
-                leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(MeloIcons.Columns, null, tint = MaterialTheme.colorScheme.secondary) },
             )
-            SwitchSettingItem(stringResource(R.string.settings_compact_mode_title), stringResource(R.string.settings_compact_mode_subtitle), s.navBarCompact, { v -> update { it.copy(navBarCompact = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_view_week_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_compact_mode_title), stringResource(R.string.settings_compact_mode_subtitle), s.navBarCompact, { v -> update { it.copy(navBarCompact = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_view_week_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_lyrics_screen_section)) {
+            SwitchSettingItem(stringResource(R.string.settings_immersive_lyrics_title), stringResource(R.string.settings_immersive_lyrics_subtitle), s.immersiveLyrics, { v -> update { it.copy(immersiveLyrics = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+    }
+}
+
+/** What Melo plays and how: sound, the queue, background playback and lyrics sources. */
+@Composable
+private fun PlaybackSettings(model: MeloModel, navController: NavHostController) {
+    val s by model.ui.settings.collectAsStateWithLifecycle()
+    val update = model.ui::updateSettings
+    SettingsScaffold(stringResource(R.string.settings_category_playback_title), navController) {
+        SettingsSection(
+            title = stringResource(R.string.settings_section_quality),
+            footer = stringResource(R.string.settings_quality_footer),
+        ) {
+            val rungs = `in`.melo.data.AudioQuality.entries.associate { rung ->
+                rung.key to stringResource(
+                    when (rung) {
+                        `in`.melo.data.AudioQuality.LOW -> R.string.audio_quality_low
+                        `in`.melo.data.AudioQuality.NORMAL -> R.string.audio_quality_normal
+                        `in`.melo.data.AudioQuality.HIGH -> R.string.audio_quality_high
+                        `in`.melo.data.AudioQuality.LOSSLESS -> R.string.audio_quality_lossless
+                    }
+                )
+            }
+            ThemeSelectorItem(
+                label = stringResource(R.string.settings_quality_wifi_title),
+                description = stringResource(R.string.settings_quality_description),
+                options = rungs,
+                selectedKey = `in`.melo.data.AudioQuality.of(s.streamingQualityWifi, `in`.melo.data.AudioQuality.WifiDefault).key,
+                onSelectionChanged = { key -> update { it.copy(streamingQualityWifi = key) } },
+                leadingIcon = { Icon(MeloIcons.Wifi, null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+            ThemeSelectorItem(
+                label = stringResource(R.string.settings_quality_mobile_title),
+                description = stringResource(R.string.settings_quality_description),
+                options = rungs,
+                selectedKey = `in`.melo.data.AudioQuality.of(s.streamingQualityMobile, `in`.melo.data.AudioQuality.MobileDefault).key,
+                onSelectionChanged = { key -> update { it.copy(streamingQualityMobile = key) } },
+                leadingIcon = { Icon(MeloIcons.SignalCellularAlt, null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+        }
+        SettingsSection(title = stringResource(R.string.settings_section_audio)) {
+            SettingsItem(
+                title = stringResource(R.string.settings_category_equalizer_title),
+                subtitle = stringResource(R.string.settings_category_equalizer_subtitle),
+                leadingIcon = { Icon(MeloIcons.GraphicEq, null, tint = MaterialTheme.colorScheme.secondary) },
+                onClick = { navController.navigateSafely(Screen.Equalizer.route) },
+                trailingIcon = { SettingsChevron() },
+            )
+            SwitchSettingItem(stringResource(R.string.settings_normalization_title), stringResource(R.string.settings_normalization_subtitle), s.audioNormalization, { v -> update { it.copy(audioNormalization = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_volume_down_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_section_queue)) {
+            SwitchSettingItem(stringResource(R.string.settings_persistent_shuffle_title), stringResource(R.string.settings_persistent_shuffle_subtitle), s.persistentShuffle, { v -> update { it.copy(persistentShuffle = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_show_queue_history_title), stringResource(R.string.settings_show_queue_history_subtitle), s.showQueueHistory, { v -> update { it.copy(showQueueHistory = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_queue_music_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_section_background)) {
+            SwitchSettingItem(stringResource(R.string.settings_keep_playing_title), stringResource(R.string.settings_keep_playing_subtitle), s.keepPlayingInBackground, { v -> update { it.copy(keepPlayingInBackground = v) } }, leadingIcon = { Icon(MeloIcons.MusicNote, null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_pause_on_volume_zero), stringResource(R.string.settings_pause_on_volume_zero_desc), s.pauseOnVolumeZero, { v -> update { it.copy(pauseOnVolumeZero = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_volume_down_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_headphones_resume_title), stringResource(R.string.settings_headphones_resume_subtitle), s.resumeOnHeadphones, { v -> update { it.copy(resumeOnHeadphones = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_headphones_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_lyrics_sources_section)) {
+            val enabled = s.lyricsProviderList()
+            `in`.melo.data.repository.LyricsProvider.entries.forEach { provider ->
+                val detail = stringResource(provider.detail) + if (provider.wordTimed) " · " + stringResource(R.string.lyrics_provider_word_timed) else ""
+                SwitchSettingItem(provider.label, detail, provider in enabled, { v -> update { it.withLyricsProvider(provider, v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            }
+        }
+    }
+}
+
+/** General: language and the start tab, then how touches behave across the app. */
+@Composable
+private fun BehaviorSettings(model: MeloModel, navController: NavHostController) {
+    val s by model.ui.settings.collectAsStateWithLifecycle()
+    val update = model.ui::updateSettings
+    val context = LocalContext.current
+    SettingsScaffold(stringResource(R.string.settings_category_behavior_title), navController) {
+        SettingsSection(title = null) {
+            ThemeSelectorItem(
+                label = stringResource(R.string.settings_app_language_title),
+                description = stringResource(R.string.settings_app_language_subtitle),
+                options = mapOf(
+                    AppSettings.LANGUAGE_SYSTEM to stringResource(R.string.settings_language_system),
+                    "fr" to "Français", "en" to "English",
+                ),
+                selectedKey = s.language,
+                onSelectionChanged = { key -> update { it.copy(language = key) }; AppLocales.apply(context, key) },
+                leadingIcon = { Icon(MeloIcons.Language, null, tint = MaterialTheme.colorScheme.secondary) },
+            )
             ThemeSelectorItem(
                 label = stringResource(R.string.settings_default_tab_title),
                 description = stringResource(R.string.settings_default_tab_subtitle),
@@ -377,72 +493,11 @@ private fun AppearanceSettings(model: MeloModel, navController: NavHostControlle
                 ),
                 selectedKey = s.defaultTab,
                 onSelectionChanged = { key -> update { it.copy(defaultTab = key) } },
-                leadingIcon = { Icon(painterResource(R.drawable.tab_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(meloPainter(R.drawable.tab_24), null, tint = MaterialTheme.colorScheme.secondary) },
             )
+            SwitchSettingItem(stringResource(R.string.settings_haptic_feedback_title), stringResource(R.string.settings_haptic_feedback_subtitle), s.hapticsEnabled, { v -> update { it.copy(hapticsEnabled = v) } }, leadingIcon = { Icon(MeloIcons.Vibration, null, tint = MaterialTheme.colorScheme.secondary) })
         }
-        SettingsSection(title = stringResource(R.string.settings_lyrics_screen_section), icon = {}) {
-            SwitchSettingItem(stringResource(R.string.settings_immersive_lyrics_title), stringResource(R.string.settings_immersive_lyrics_subtitle), s.immersiveLyrics, { v -> update { it.copy(immersiveLyrics = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) })
-            SwitchSettingItem(stringResource(R.string.settings_lyrics_fallback_title), stringResource(R.string.settings_lyrics_fallback_subtitle), s.lyricsFallback, { v -> update { it.copy(lyricsFallback = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) })
-        }
-    }
-}
-
-@Composable
-private fun AdvancedAppearanceSettings(model: MeloModel, navController: NavHostController) {
-    val s by model.ui.settings.collectAsStateWithLifecycle()
-    val update = model.ui::updateSettings
-    SettingsScaffold(stringResource(R.string.melo_advanced), navController) {
-        SwitchSettingItem(stringResource(R.string.settings_smooth_corners_title), stringResource(R.string.settings_smooth_corners_subtitle), s.useSmoothCorners, { v -> update { it.copy(useSmoothCorners = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_rounded_corner_24), null, tint = MaterialTheme.colorScheme.secondary) })
-        SwitchSettingItem(stringResource(R.string.settings_disable_blur_all_over_title), stringResource(R.string.settings_disable_blur_all_over_subtitle), s.disableBlur, { v -> update { it.copy(disableBlur = v) } }, leadingIcon = { Icon(Icons.Rounded.BlurOff, null, tint = MaterialTheme.colorScheme.secondary) })
-    }
-}
-
-@Composable
-private fun PlaybackSettings(model: MeloModel, navController: NavHostController) {
-    val s by model.ui.settings.collectAsStateWithLifecycle()
-    val update = model.ui::updateSettings
-    SettingsScaffold(stringResource(R.string.settings_category_playback_title), navController) {
-        val streaming = mapOf(
-            `in`.melo.data.AudioQuality.AUTO.key to stringResource(R.string.audio_quality_auto),
-            `in`.melo.data.AudioQuality.NORMAL.key to stringResource(R.string.audio_quality_normal),
-            `in`.melo.data.AudioQuality.VERY_HIGH.key to stringResource(R.string.audio_quality_very_high),
-        )
-        ThemeSelectorItem(
-            label = stringResource(R.string.settings_quality_wifi_title), description = stringResource(R.string.settings_quality_description),
-            options = streaming, selectedKey = `in`.melo.data.AudioQuality.of(s.streamingQualityWifi).key,
-            onSelectionChanged = { key -> update { it.copy(streamingQualityWifi = key) } },
-            leadingIcon = { Icon(Icons.Rounded.Wifi, null, tint = MaterialTheme.colorScheme.secondary) },
-        )
-        ThemeSelectorItem(
-            label = stringResource(R.string.settings_quality_mobile_title), description = stringResource(R.string.settings_quality_description),
-            options = streaming, selectedKey = `in`.melo.data.AudioQuality.of(s.streamingQualityMobile).key,
-            onSelectionChanged = { key -> update { it.copy(streamingQualityMobile = key) } },
-            leadingIcon = { Icon(Icons.Rounded.SignalCellularAlt, null, tint = MaterialTheme.colorScheme.secondary) },
-        )
-        ThemeSelectorItem(
-            label = stringResource(R.string.settings_quality_download_title), description = stringResource(R.string.settings_quality_download_description),
-            options = streaming - `in`.melo.data.AudioQuality.AUTO.key,
-            selectedKey = `in`.melo.data.AudioQuality.of(s.downloadQuality).takeIf { it != `in`.melo.data.AudioQuality.AUTO }?.key ?: `in`.melo.data.AudioQuality.VERY_HIGH.key,
-            onSelectionChanged = { key -> update { it.copy(downloadQuality = key) } },
-            leadingIcon = { Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.secondary) },
-        )
-        SwitchSettingItem(stringResource(R.string.settings_normalization_title), stringResource(R.string.settings_normalization_subtitle), s.audioNormalization, { v -> update { it.copy(audioNormalization = v) } }, leadingIcon = { Icon(Icons.Rounded.GraphicEq, null, tint = MaterialTheme.colorScheme.secondary) })
-        SwitchSettingItem(stringResource(R.string.settings_keep_playing_title), stringResource(R.string.settings_keep_playing_subtitle), s.keepPlayingInBackground, { v -> update { it.copy(keepPlayingInBackground = v) } }, leadingIcon = { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.secondary) })
-        SwitchSettingItem(stringResource(R.string.settings_pause_on_volume_zero), stringResource(R.string.settings_pause_on_volume_zero_desc), s.pauseOnVolumeZero, { v -> update { it.copy(pauseOnVolumeZero = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_volume_down_24), null, tint = MaterialTheme.colorScheme.secondary) })
-        SwitchSettingItem(stringResource(R.string.settings_headphones_resume_title), stringResource(R.string.settings_headphones_resume_subtitle), s.resumeOnHeadphones, { v -> update { it.copy(resumeOnHeadphones = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_headphones_24), null, tint = MaterialTheme.colorScheme.secondary) })
-        SwitchSettingItem(stringResource(R.string.settings_persistent_shuffle_title), stringResource(R.string.settings_persistent_shuffle_subtitle), s.persistentShuffle, { v -> update { it.copy(persistentShuffle = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) })
-        SwitchSettingItem(stringResource(R.string.settings_show_queue_history_title), stringResource(R.string.settings_show_queue_history_subtitle), s.showQueueHistory, { v -> update { it.copy(showQueueHistory = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_queue_music_24), null, tint = MaterialTheme.colorScheme.secondary) })
-    }
-}
-
-@Composable
-private fun BehaviorSettings(model: MeloModel, navController: NavHostController) {
-    val s by model.ui.settings.collectAsStateWithLifecycle()
-    val update = model.ui::updateSettings
-    SettingsScaffold(stringResource(R.string.settings_category_behavior_title), navController) {
-        SwitchSettingItem(stringResource(R.string.settings_tap_bg_closes_title), stringResource(R.string.settings_tap_bg_closes_subtitle), s.tapBackgroundClosesPlayer, { v -> update { it.copy(tapBackgroundClosesPlayer = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_touch_app_24), null, tint = MaterialTheme.colorScheme.secondary) })
-        SwitchSettingItem(stringResource(R.string.settings_haptic_feedback_title), stringResource(R.string.settings_haptic_feedback_subtitle), s.hapticsEnabled, { v -> update { it.copy(hapticsEnabled = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_touch_app_24), null, tint = MaterialTheme.colorScheme.secondary) })
-        run {
+        SettingsSection(title = stringResource(R.string.settings_section_track_swipes)) {
             val swipeOptions = mapOf(
                 TrackSwipeAction.NONE.key to stringResource(R.string.swipe_action_none),
                 TrackSwipeAction.ADD_TO_QUEUE.key to stringResource(R.string.swipe_action_queue),
@@ -454,34 +509,42 @@ private fun BehaviorSettings(model: MeloModel, navController: NavHostController)
                 label = stringResource(R.string.settings_swipe_right_title), description = stringResource(R.string.settings_swipe_right_subtitle),
                 options = swipeOptions, selectedKey = TrackSwipeAction.of(s.swipeRight).key,
                 onSelectionChanged = { key -> update { it.copy(swipeRight = key) } },
-                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(MeloIcons.ArrowForward, null, tint = MaterialTheme.colorScheme.secondary) },
             )
             ThemeSelectorItem(
                 label = stringResource(R.string.settings_swipe_left_title), description = stringResource(R.string.settings_swipe_left_subtitle),
                 options = swipeOptions, selectedKey = TrackSwipeAction.of(s.swipeLeft).key,
                 onSelectionChanged = { key -> update { it.copy(swipeLeft = key) } },
-                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = MaterialTheme.colorScheme.secondary) },
+                leadingIcon = { Icon(MeloIcons.ArrowBackward, null, tint = MaterialTheme.colorScheme.secondary) },
             )
         }
-        SwitchSettingItem(stringResource(R.string.settings_search_sources_title), stringResource(R.string.settings_search_sources_subtitle), s.showSearchSources, { v -> update { it.copy(showSearchSources = v) } }, leadingIcon = { Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.secondary) })
-        ThemeSelectorItem(
-            label = stringResource(R.string.settings_mini_swipe_title), description = stringResource(R.string.settings_mini_swipe_subtitle),
-            options = mapOf(
-                AppSettings.MINI_SWIPE_TRACKS to stringResource(R.string.settings_mini_swipe_tracks),
-                AppSettings.MINI_SWIPE_DISMISS to stringResource(R.string.settings_mini_swipe_dismiss),
-                AppSettings.MINI_SWIPE_OFF to stringResource(R.string.settings_mini_swipe_off),
-            ),
-            selectedKey = s.miniPlayerSwipe,
-            onSelectionChanged = { key -> update { it.copy(miniPlayerSwipe = key) } },
-            leadingIcon = { Icon(Icons.Rounded.SwipeLeft, null, tint = MaterialTheme.colorScheme.secondary) },
-        )
+        SettingsSection(title = stringResource(R.string.settings_section_player)) {
+            ThemeSelectorItem(
+                label = stringResource(R.string.settings_mini_swipe_title), description = stringResource(R.string.settings_mini_swipe_subtitle),
+                options = mapOf(
+                    AppSettings.MINI_SWIPE_TRACKS to stringResource(R.string.settings_mini_swipe_tracks),
+                    AppSettings.MINI_SWIPE_DISMISS to stringResource(R.string.settings_mini_swipe_dismiss),
+                    AppSettings.MINI_SWIPE_OFF to stringResource(R.string.settings_mini_swipe_off),
+                ),
+                selectedKey = s.miniPlayerSwipe,
+                onSelectionChanged = { key -> update { it.copy(miniPlayerSwipe = key) } },
+                leadingIcon = { Icon(MeloIcons.SwipeLeft, null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+            SwitchSettingItem(stringResource(R.string.settings_tap_bg_closes_title), stringResource(R.string.settings_tap_bg_closes_subtitle), s.tapBackgroundClosesPlayer, { v -> update { it.copy(tapBackgroundClosesPlayer = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_touch_app_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_section_search)) {
+            SwitchSettingItem(stringResource(R.string.settings_search_sources_title), stringResource(R.string.settings_search_sources_subtitle), s.showSearchSources, { v -> update { it.copy(showSearchSources = v) } }, leadingIcon = { Icon(MeloIcons.Search, null, tint = MaterialTheme.colorScheme.secondary) })
+        }
     }
 }
 
+private fun sizeUnit(bytes: String, octets: String) = if (java.util.Locale.getDefault().language == "fr") octets else bytes
+
 internal fun formatSize(bytes: Long): String = when {
-    bytes >= 1L shl 30 -> String.format(java.util.Locale.getDefault(), "%.1f Go", bytes / (1L shl 30).toDouble())
-    bytes >= 1L shl 20 -> String.format(java.util.Locale.getDefault(), "%.0f Mo", bytes / (1L shl 20).toDouble())
-    else -> "${bytes / 1024} Ko"
+    // French writes octets (Ko, Mo, Go); every other language gets bytes (KB, MB, GB).
+    bytes >= 1L shl 30 -> String.format(java.util.Locale.getDefault(), "%.1f %s", bytes / (1L shl 30).toDouble(), sizeUnit("GB", "Go"))
+    bytes >= 1L shl 20 -> String.format(java.util.Locale.getDefault(), "%.0f %s", bytes / (1L shl 20).toDouble(), sizeUnit("MB", "Mo"))
+    else -> "${bytes / 1024} ${sizeUnit("KB", "Ko")}"
 }
 
 @Composable
@@ -502,53 +565,67 @@ private fun StorageSettings(model: MeloModel, navController: NavHostController) 
         imageBytes = withContext(Dispatchers.IO) { context.imageLoader.diskCache?.size ?: 0L }
         downloadBytes = withContext(Dispatchers.IO) { model.ui.downloadsSizeBytes() }
     }
+    var confirmClearDownloads by remember { mutableStateOf(false) }
     SettingsScaffold(stringResource(R.string.settings_storage_title), navController) {
-        SettingsItem(
-            title = stringResource(R.string.audio_cache_title),
-            subtitle = stringResource(R.string.audio_cache_usage, formatSize(audioBytes), formatSize(settings.audioCacheLimitMb * 1024L * 1024L)),
-            leadingIcon = { Icon(Icons.Rounded.LibraryMusic, null, tint = MaterialTheme.colorScheme.secondary) },
-            onClick = { navController.navigateSafely(Screen.SettingsCategory.createRoute("audio_cache")) },
-        )
-        ActionSettingsItem(
-            title = stringResource(R.string.catalog_cache_title),
-            subtitle = stringResource(R.string.catalog_cache_subtitle, formatSize(catalogBytes)),
-            icon = { Icon(Icons.Rounded.CloudOff, null, tint = MaterialTheme.colorScheme.secondary) },
-            primaryActionLabel = stringResource(R.string.common_clear),
-            onPrimaryAction = {
-                scope.launch {
-                    withContext(Dispatchers.IO) { model.ui.clearCatalog() }
-                    revision++
-                }
-            },
-        )
-        ActionSettingsItem(
-            title = stringResource(R.string.settings_cache_images_title),
-            subtitle = formatSize(imageBytes),
-            icon = { Icon(Icons.Rounded.Image, null, tint = MaterialTheme.colorScheme.secondary) },
-            primaryActionLabel = stringResource(R.string.common_clear),
-            onPrimaryAction = {
-                scope.launch {
-                    withContext(Dispatchers.IO) { context.imageLoader.diskCache?.clear() }
-                    context.imageLoader.memoryCache?.clear()
-                    revision++
-                }
-            },
-        )
-        ActionSettingsItem(
-            title = stringResource(R.string.settings_cache_lyrics_title),
-            subtitle = stringResource(R.string.settings_cache_lyrics_subtitle),
-            icon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) },
-            primaryActionLabel = stringResource(R.string.common_clear),
-            onPrimaryAction = { model.ui.clearSavedLyrics() },
-        )
-        ActionSettingsItem(
-            title = stringResource(R.string.library_tab_downloads),
-            subtitle = stringResource(R.string.downloads_storage, downloads.size, formatSize(downloadBytes)),
-            icon = { Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.secondary) },
-            primaryActionLabel = stringResource(R.string.common_clear),
-            onPrimaryAction = { model.ui.removeAllDownloads() },
-        )
+        SettingsSection(title = stringResource(R.string.settings_section_downloads)) {
+            ActionSettingsItem(
+                title = stringResource(R.string.library_tab_downloads),
+                subtitle = stringResource(R.string.downloads_storage, downloads.size, formatSize(downloadBytes)),
+                icon = { Icon(MeloIcons.Download, null, tint = MaterialTheme.colorScheme.secondary) },
+                primaryActionLabel = stringResource(R.string.common_clear),
+                onPrimaryAction = { confirmClearDownloads = true },
+                enabled = downloads.isNotEmpty(),
+            )
+        }
+        SettingsSection(title = stringResource(R.string.settings_section_cache)) {
+            SettingsItem(
+                title = stringResource(R.string.audio_cache_title),
+                subtitle = stringResource(R.string.audio_cache_usage, formatSize(audioBytes), formatSize(settings.audioCacheLimitMb * 1024L * 1024L)),
+                leadingIcon = { Icon(MeloIcons.LibraryMusic, null, tint = MaterialTheme.colorScheme.secondary) },
+                onClick = { navController.navigateSafely(Screen.SettingsCategory.createRoute("audio_cache")) },
+                trailingIcon = { SettingsChevron() },
+            )
+            ActionSettingsItem(
+                title = stringResource(R.string.catalog_cache_title),
+                subtitle = stringResource(R.string.catalog_cache_subtitle, formatSize(catalogBytes)),
+                icon = { Icon(MeloIcons.CloudOff, null, tint = MaterialTheme.colorScheme.secondary) },
+                primaryActionLabel = stringResource(R.string.common_clear),
+                onPrimaryAction = {
+                    scope.launch {
+                        withContext(Dispatchers.IO) { model.ui.clearCatalog() }
+                        revision++
+                    }
+                },
+            )
+            ActionSettingsItem(
+                title = stringResource(R.string.settings_cache_images_title),
+                subtitle = formatSize(imageBytes),
+                icon = { Icon(MeloIcons.Image, null, tint = MaterialTheme.colorScheme.secondary) },
+                primaryActionLabel = stringResource(R.string.common_clear),
+                onPrimaryAction = {
+                    scope.launch {
+                        withContext(Dispatchers.IO) { context.imageLoader.diskCache?.clear() }
+                        context.imageLoader.memoryCache?.clear()
+                        revision++
+                    }
+                },
+            )
+            ActionSettingsItem(
+                title = stringResource(R.string.settings_cache_lyrics_title),
+                subtitle = stringResource(R.string.settings_cache_lyrics_subtitle),
+                icon = { Icon(meloPainter(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                primaryActionLabel = stringResource(R.string.common_clear),
+                onPrimaryAction = { model.ui.clearSavedLyrics() },
+            )
+        }
     }
+    if (confirmClearDownloads) SettingsConfirmDialog(
+        title = stringResource(R.string.settings_downloads_clear_title),
+        text = stringResource(R.string.settings_downloads_clear_text, downloads.size, formatSize(downloadBytes)),
+        confirm = stringResource(R.string.settings_downloads_clear_action),
+        onConfirm = { model.ui.removeAllDownloads() },
+        onDismiss = { confirmClearDownloads = false },
+    )
 }
 
 @Composable
@@ -562,11 +639,12 @@ private fun DiagnosticsSettings(model: MeloModel, navController: NavHostControll
     val chooser = stringResource(R.string.diagnostics_share_action)
     SettingsScaffold(stringResource(R.string.diagnostics_title), navController) {
         Text(stringResource(R.string.diagnostics_description), style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = MeloLayout.PageGutter))
+        `in`.melo.presentation.components.MeloGroupedList {
         ActionSettingsItem(
             title = stringResource(R.string.diagnostics_send_title),
             subtitle = stringResource(R.string.diagnostics_send_subtitle),
-            icon = { Icon(Icons.Rounded.BugReport, null, tint = MaterialTheme.colorScheme.secondary) },
+            icon = { Icon(MeloIcons.BugReport, null, tint = MaterialTheme.colorScheme.secondary) },
             primaryActionLabel = stringResource(R.string.diagnostics_share_action),
             onPrimaryAction = {
                 val text = report ?: return@ActionSettingsItem
@@ -587,11 +665,12 @@ private fun DiagnosticsSettings(model: MeloModel, navController: NavHostControll
         ActionSettingsItem(
             title = stringResource(R.string.diagnostics_clear_title),
             subtitle = stringResource(R.string.diagnostics_clear_subtitle),
-            icon = { Icon(Icons.Rounded.Restore, null, tint = MaterialTheme.colorScheme.secondary) },
+            icon = { Icon(MeloIcons.Restore, null, tint = MaterialTheme.colorScheme.secondary) },
             primaryActionLabel = stringResource(R.string.diagnostics_clear_action),
             onPrimaryAction = { scope.launch { model.clearDiagnostics(); revision++ } },
         )
-        MeloCard(color = MaterialTheme.colorScheme.surfaceContainer, shape = MeloLayout.CardShape, modifier = Modifier.fillMaxWidth()) {
+        }
+        MeloCard(color = `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainer), shape = MeloLayout.CardShape, modifier = Modifier.fillMaxWidth()) {
             androidx.compose.foundation.text.selection.SelectionContainer {
                 Text(report ?: stringResource(R.string.diagnostics_loading), modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
@@ -626,84 +705,72 @@ private fun BackupSettings(model: MeloModel, navController: NavHostController) {
         }
     }
     SettingsScaffold(stringResource(R.string.settings_category_backup_title), navController) {
+        `in`.melo.presentation.components.MeloGroupedList {
         ActionSettingsItem(
             title = stringResource(R.string.settings_export_backup_title),
             subtitle = stringResource(R.string.backup_export_subtitle),
-            icon = { Icon(painterResource(R.drawable.outline_save_24), null, tint = MaterialTheme.colorScheme.secondary) },
+            icon = { Icon(meloPainter(R.drawable.outline_save_24), null, tint = MaterialTheme.colorScheme.secondary) },
             primaryActionLabel = stringResource(R.string.backup_export_action),
             onPrimaryAction = { exportLauncher.launch("melo-backup.json") },
         )
         ActionSettingsItem(
             title = stringResource(R.string.settings_import_backup_title),
             subtitle = stringResource(R.string.backup_import_subtitle),
-            icon = { Icon(Icons.Rounded.Restore, null, tint = MaterialTheme.colorScheme.secondary) },
+            icon = { Icon(MeloIcons.Restore, null, tint = MaterialTheme.colorScheme.secondary) },
             primaryActionLabel = stringResource(R.string.backup_import_action),
             onPrimaryAction = { importLauncher.launch(arrayOf("application/json")) },
         )
+        }
     }
 }
 
+/**
+ * Both accounts first, each with its picture, then how links open, then the ways out at the end,
+ * in red and each confirmed, as a phone's account page does.
+ */
 @Composable
 private fun AccountSettings(model: MeloModel, navController: NavHostController) {
     val context = LocalContext.current
     val discovery by model.discovery.collectAsStateWithLifecycle()
     val google by model.youTubeAccount.collectAsStateWithLifecycle()
     val spotifyProfile by model.spotifyAccountProfile.collectAsStateWithLifecycle()
+    var confirmSpotify by remember { mutableStateOf(false) }
+    var confirmGoogle by remember { mutableStateOf(false) }
     SettingsScaffold(stringResource(R.string.settings_accounts_title), navController) {
-        SettingsSection(title = stringResource(R.string.search_source_spotify), icon = {}) {
-            if (!discovery.spotifyEnabled) {
-                SettingsItem(
-                    title = stringResource(R.string.settings_account_signin_title),
-                    subtitle = stringResource(R.string.settings_account_signin_subtitle),
-                    leadingIcon = { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.secondary) },
-                    onClick = { model.showSignIn() },
-                )
-            } else Column(verticalArrangement = Arrangement.spacedBy(MeloLayout.Space1)) {
-                spotifyProfile?.let { profile ->
-                    MeloCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MeloLayout.CardShape,
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = MeloLayout.PageGutter, vertical = MeloLayout.Space3),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space3),
-                        ) {
-                            Box(Modifier.size(MeloLayout.ControlVisual), contentAlignment = Alignment.Center) {
-                                if (profile.imageUrl != null) coil.compose.AsyncImage(
-                                    profile.imageUrl,
-                                    null,
-                                    Modifier.size(28.dp).clip(CircleShape),
-                                ) else Icon(
-                                    painterResource(R.drawable.ic_source_spotify),
-                                    null,
-                                    Modifier.size(28.dp),
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                )
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(MeloLayout.Space1)) {
-                                Text(
-                                    profile.displayName ?: stringResource(R.string.search_source_spotify),
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
-                        }
-                    }
-                }
-                SettingsItem(
-                    title = stringResource(R.string.settings_logout_title),
-                    subtitle = stringResource(R.string.settings_logout_subtitle),
-                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Logout, null, tint = MaterialTheme.colorScheme.error) },
-                    onClick = { model.disconnectSpotify() },
-                )
-            }
+        `in`.melo.presentation.components.MeloGroupedList {
+            if (discovery.spotifyEnabled) SettingsAccountRow(
+                title = spotifyProfile?.displayName ?: stringResource(R.string.search_source_spotify),
+                subtitle = stringResource(R.string.search_source_spotify),
+                picture = { AccountPicture(spotifyProfile?.imageUrl) },
+                onClick = null,
+                trailing = { Icon(meloPainter(R.drawable.ic_source_spotify), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            ) else SettingsItem(
+                title = stringResource(R.string.settings_account_signin_title),
+                subtitle = stringResource(R.string.settings_account_signin_subtitle),
+                leadingIcon = { Icon(meloPainter(R.drawable.ic_source_spotify), null, tint = MaterialTheme.colorScheme.secondary) },
+                onClick = { model.showSignIn() },
+                trailingIcon = { SettingsChevron() },
+            )
+            val account = google
+            if (account != null) SettingsAccountRow(
+                title = account.name,
+                subtitle = account.handle.ifBlank { stringResource(R.string.search_source_youtube) },
+                picture = { AccountPicture(account.photoUrl) },
+                onClick = { model.refreshYouTubeLibrary() },
+                trailing = { Icon(meloPainter(R.drawable.ic_source_youtube_music), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            ) else SettingsItem(
+                title = stringResource(R.string.google_connect_title),
+                subtitle = stringResource(R.string.google_connect_subtitle),
+                leadingIcon = { Icon(meloPainter(R.drawable.ic_source_youtube_music), null, tint = MaterialTheme.colorScheme.secondary) },
+                onClick = { navController.navigateSafely(Screen.GoogleSignIn.route) },
+                trailingIcon = { SettingsChevron() },
+            )
         }
-        SettingsSection(title = stringResource(R.string.settings_link_handling_section), icon = {}) {
+        SettingsSection(title = stringResource(R.string.settings_section_links), footer = stringResource(R.string.settings_spotify_links_subtitle)) {
             SettingsItem(
                 title = stringResource(R.string.settings_spotify_links_title),
-                subtitle = stringResource(R.string.settings_spotify_links_subtitle),
-                leadingIcon = { Icon(Icons.Rounded.Link, null, tint = MaterialTheme.colorScheme.secondary) },
+                subtitle = "",
+                leadingIcon = { Icon(MeloIcons.Link, null, tint = MaterialTheme.colorScheme.secondary) },
                 onClick = {
                     val packageUri = Uri.fromParts("package", context.packageName, null)
                     val preferredLinks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -717,33 +784,28 @@ private fun AccountSettings(model: MeloModel, navController: NavHostController) 
                         context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri))
                     }
                 },
+                trailingIcon = { SettingsChevron() },
             )
         }
-        SettingsSection(title = stringResource(R.string.search_source_youtube), icon = {}) {
-            val account = google
-            if (account == null) SettingsItem(
-                title = stringResource(R.string.google_connect_title),
-                subtitle = stringResource(R.string.google_connect_subtitle),
-                leadingIcon = { Icon(painterResource(R.drawable.ic_source_youtube_music), null, tint = MaterialTheme.colorScheme.secondary) },
-                onClick = { navController.navigateSafely(Screen.GoogleSignIn.route) },
-            ) else Column(verticalArrangement = Arrangement.spacedBy(MeloLayout.Space1)) {
-                SettingsItem(
-                    title = account.name,
-                    subtitle = account.handle.ifBlank { stringResource(R.string.google_connected_subtitle) },
-                    leadingIcon = {
-                        coil.compose.AsyncImage(account.photoUrl, null, Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape))
-                    },
-                    onClick = { model.refreshYouTubeLibrary() },
-                )
-                SettingsItem(
-                    title = stringResource(R.string.google_disconnect_title),
-                    subtitle = stringResource(R.string.google_disconnect_subtitle),
-                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Logout, null, tint = MaterialTheme.colorScheme.error) },
-                    onClick = { model.disconnectGoogle() },
-                )
-            }
+        if (discovery.spotifyEnabled || google != null) `in`.melo.presentation.components.MeloGroupedList {
+            if (discovery.spotifyEnabled) SettingsDestructiveRow(stringResource(R.string.settings_logout_spotify)) { confirmSpotify = true }
+            if (google != null) SettingsDestructiveRow(stringResource(R.string.google_disconnect_title)) { confirmGoogle = true }
         }
     }
+    if (confirmSpotify) SettingsConfirmDialog(
+        title = stringResource(R.string.settings_logout_confirm),
+        text = stringResource(R.string.settings_logout_subtitle),
+        confirm = stringResource(R.string.settings_logout_title),
+        onConfirm = { model.disconnectSpotify() },
+        onDismiss = { confirmSpotify = false },
+    )
+    if (confirmGoogle) SettingsConfirmDialog(
+        title = stringResource(R.string.google_disconnect_confirm),
+        text = stringResource(R.string.google_disconnect_subtitle),
+        confirm = stringResource(R.string.google_disconnect_action),
+        onConfirm = { model.disconnectGoogle() },
+        onDismiss = { confirmGoogle = false },
+    )
 }
 
 @Composable
@@ -784,41 +846,51 @@ private fun HomeSettings(model: MeloModel, navController: NavHostController) {
         save(shelves.mapIndexed { position, config -> if (position == index) update(config) else config })
     fun move(from: Int, to: Int) { if (to in shelves.indices) save(shelves.toMutableList().apply { add(to, removeAt(from)) }) }
     SettingsScaffold(stringResource(R.string.settings_home_title), navController) {
-        Text(stringResource(R.string.settings_home_description), Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SettingsSection(title = stringResource(R.string.settings_section_home_style)) {
+            SwitchSettingItem(stringResource(R.string.home_gradients_setting), stringResource(R.string.home_gradients_setting_subtitle), s.homeGradients, { v -> model.ui.updateSettings { it.copy(homeGradients = v) } }, leadingIcon = { Icon(MeloIcons.Style, null, tint = MaterialTheme.colorScheme.secondary) })
+            ThemeSelectorItem(
+                label = stringResource(R.string.settings_collage_pattern_title),
+                description = stringResource(R.string.settings_collage_pattern_subtitle),
+                options = CollagePattern.entries.associate { it.storageKey to it.label },
+                selectedKey = s.collagePattern,
+                onSelectionChanged = { key -> model.ui.updateSettings { it.copy(collagePattern = key) } },
+                leadingIcon = { Icon(meloPainter(R.drawable.rounded_view_column_24), null, tint = MaterialTheme.colorScheme.secondary) },
+            )
+            SwitchSettingItem(stringResource(R.string.settings_auto_rotate_patterns_title), stringResource(R.string.settings_auto_rotate_patterns_subtitle), s.collageAutoRotate, { v -> model.ui.updateSettings { it.copy(collageAutoRotate = v) } }, leadingIcon = { Icon(meloPainter(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        }
+        SettingsSection(title = stringResource(R.string.settings_section_shelves), footer = stringResource(R.string.settings_home_description)) {
         shelves.forEachIndexed { index, config ->
-            MeloCard(color = MaterialTheme.colorScheme.surfaceContainer, shape = MeloLayout.PanelShape, modifier = Modifier.fillMaxWidth()) {
+            MeloCard(color = `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainer), shape = MeloLayout.PanelShape, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(start = MeloLayout.PageGutter, end = MeloLayout.Space2, top = MeloLayout.Space2, bottom = MeloLayout.Space3), verticalArrangement = Arrangement.spacedBy(MeloLayout.Space2)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(shelfName(config.shelf), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        MeloIconButton(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.shelf_move_up),
+                        MeloIconButton(MeloIcons.KeyboardArrowUp, stringResource(R.string.shelf_move_up),
                             onClick = { move(index, index - 1) }, enabled = index > 0)
-                        MeloIconButton(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.shelf_move_down),
+                        MeloIconButton(MeloIcons.KeyboardArrowDown, stringResource(R.string.shelf_move_down),
                             onClick = { move(index, index + 1) }, enabled = index < shelves.lastIndex)
-                        androidx.compose.material3.Switch(config.visible, { visible -> change(index) { it.copy(visible = visible) } })
+                        MeloSwitch(config.visible, { visible -> change(index) { it.copy(visible = visible) } })
                     }
                     if (config.visible) {
                         if (config.shelf.styles.size > 1) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space2)) {
                             config.shelf.styles.forEach { style ->
-                                androidx.compose.material3.FilterChip(selected = config.style == style, onClick = { change(index) { it.copy(style = style) } },
-                                    label = { Text(styleName(style)) }, shape = MeloLayout.PillShape)
+                                `in`.melo.presentation.components.MeloChip(styleName(style), config.style == style, { change(index) { it.copy(style = style) } })
                             }
                         }
                         if (config.shelf.counts) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(MeloLayout.Space2),
                             itemVerticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.shelf_items), Modifier.padding(end = 4.dp), style = MaterialTheme.typography.labelLarge)
                             `in`.melo.data.preferences.HomeLayout.COUNTS.forEach { count ->
-                                androidx.compose.material3.FilterChip(selected = config.count == count, onClick = { change(index) { it.copy(count = count) } },
-                                    label = { Text(count.toString()) }, shape = MeloLayout.PillShape)
+                                `in`.melo.presentation.components.MeloChip(count.toString(), config.count == count, { change(index) { it.copy(count = count) } })
                             }
                         }
                         if (config.style != `in`.melo.data.preferences.ShelfStyle.CARD && config.style != `in`.melo.data.preferences.ShelfStyle.COLLAGE) Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.shelf_show_title), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            androidx.compose.material3.Switch(config.showTitle, { shown -> change(index) { it.copy(showTitle = shown) } })
+                            MeloSwitch(config.showTitle, { shown -> change(index) { it.copy(showTitle = shown) } })
                         }
                     }
                 }
             }
+        }
         }
         MeloButton(
             text = stringResource(R.string.shelf_reset),
@@ -835,7 +907,21 @@ private fun HomeSettings(model: MeloModel, navController: NavHostController) {
 private fun PageActionsSettings(model: MeloModel, navController: NavHostController) {
     val s by model.ui.settings.collectAsStateWithLifecycle()
     SettingsScaffold(stringResource(R.string.settings_pages_title), navController) {
-        Text(stringResource(R.string.settings_pages_description), Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        SwitchSettingItem(
+            title = stringResource(R.string.settings_pages_tint_title),
+            subtitle = stringResource(R.string.settings_pages_tint_subtitle),
+            checked = s.detailPageTint,
+            onCheckedChange = { value -> model.ui.updateSettings { it.copy(detailPageTint = value) } },
+            leadingIcon = { Icon(MeloIcons.Palette, null, tint = MaterialTheme.colorScheme.secondary) },
+        )
+        SwitchSettingItem(
+            title = stringResource(R.string.settings_full_screen_detail_cover_title),
+            subtitle = stringResource(R.string.settings_full_screen_detail_cover_subtitle),
+            checked = s.fullScreenDetailCover,
+            onCheckedChange = { value -> model.ui.updateSettings { it.copy(fullScreenDetailCover = value) } },
+            leadingIcon = { Icon(meloPainter(R.drawable.rounded_fullscreen_24), null, tint = MaterialTheme.colorScheme.secondary) },
+        )
+        Text(stringResource(R.string.settings_pages_description), Modifier.padding(horizontal = MeloLayout.PageGutter),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         listOf(`in`.melo.data.preferences.DetailPage.ALBUM to R.string.settings_pages_album,
             `in`.melo.data.preferences.DetailPage.PLAYLIST to R.string.settings_pages_playlist).forEach { (page, title) ->
@@ -845,23 +931,23 @@ private fun PageActionsSettings(model: MeloModel, navController: NavHostControll
                 if (page == `in`.melo.data.preferences.DetailPage.ALBUM) it.copy(albumActions = encoded) else it.copy(playlistActions = encoded)
             }
             fun move(from: Int, to: Int) { if (to in slots.indices) save(slots.toMutableList().apply { add(to, removeAt(from)) }) }
-            Text(stringResource(title), Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp),
-                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            SettingsSection(title = stringResource(title), icon = {}) {
             slots.forEachIndexed { index, slot ->
-                MeloCard(color = MaterialTheme.colorScheme.surfaceContainer, shape = MeloLayout.PanelShape, modifier = Modifier.fillMaxWidth()) {
+                MeloCard(color = `in`.melo.presentation.components.pageCardColor(MaterialTheme.colorScheme.surfaceContainer), shape = MeloLayout.PanelShape, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(actionName(slot.action), style = MaterialTheme.typography.bodyLarge)
                             Text(stringResource(if (slot.shown) R.string.settings_pages_in_bar else R.string.settings_pages_in_menu),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        MeloIconButton(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.shelf_move_up),
+                        MeloIconButton(MeloIcons.KeyboardArrowUp, stringResource(R.string.shelf_move_up),
                             onClick = { move(index, index - 1) }, enabled = index > 0)
-                        MeloIconButton(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.shelf_move_down),
+                        MeloIconButton(MeloIcons.KeyboardArrowDown, stringResource(R.string.shelf_move_down),
                             onClick = { move(index, index + 1) }, enabled = index < slots.lastIndex)
-                        androidx.compose.material3.Switch(slot.shown, { shown -> save(slots.mapIndexed { i, it -> if (i == index) it.copy(shown = shown) else it }) })
+                        MeloSwitch(slot.shown, { shown -> save(slots.mapIndexed { i, it -> if (i == index) it.copy(shown = shown) else it }) })
                     }
                 }
+            }
             }
         }
         MeloButton(
@@ -872,4 +958,59 @@ private fun PageActionsSettings(model: MeloModel, navController: NavHostControll
             style = MeloButtonStyle.Text,
         )
     }
+}
+
+/** The Glass style's options. Each slider is saved when the finger lifts, so a drag is one write. */
+@Composable
+private fun GlassOptionSliders(s: AppSettings, change: (AppSettings.() -> AppSettings) -> Unit) {
+    var transparency by remember(s.glassTransparency) { mutableFloatStateOf(s.glassTransparency) }
+    var blur by remember(s.glassBlur) { mutableFloatStateOf(s.glassBlur) }
+    var saturation by remember(s.glassSaturation) { mutableFloatStateOf(s.glassSaturation) }
+    SliderSettingsItem(
+        label = stringResource(R.string.settings_glass_transparency),
+        value = transparency, valueRange = 0f..1f, steps = 0,
+        onValueChange = { transparency = it },
+        onValueChangeFinished = { change { copy(glassTransparency = transparency) } },
+        valueText = { "${(it * 100).roundToInt()}%" },
+    )
+    SliderSettingsItem(
+        label = stringResource(R.string.settings_glass_blur),
+        value = blur, valueRange = 0f..`in`.melo.ui.glass.MeloSurfaceOptions.MAX_BLUR, steps = 0,
+        onValueChange = { blur = it },
+        onValueChangeFinished = { change { copy(glassBlur = blur) } },
+        valueText = { "${it.roundToInt()} dp" },
+    )
+    SliderSettingsItem(
+        label = stringResource(R.string.settings_glass_saturation),
+        value = saturation, valueRange = 0f..`in`.melo.ui.glass.MeloSurfaceOptions.MAX_SATURATION, steps = 0,
+        onValueChange = { saturation = it },
+        onValueChangeFinished = { change { copy(glassSaturation = saturation) } },
+        valueText = { "${(it * 100).roundToInt()}%" },
+    )
+    // The glass tint and tint darkness.
+    ThemeSelectorItem(
+        label = stringResource(R.string.settings_glass_tint),
+        description = stringResource(R.string.settings_glass_tint_subtitle),
+        options = mapOf(
+            `in`.melo.ui.glass.MeloGlassTint.SONG.key to stringResource(R.string.settings_glass_tint_song),
+            `in`.melo.ui.glass.MeloGlassTint.WHITE.key to stringResource(R.string.settings_glass_tint_white),
+            `in`.melo.ui.glass.MeloGlassTint.BLACK.key to stringResource(R.string.settings_glass_tint_black),
+            `in`.melo.ui.glass.MeloGlassTint.BLUE.key to stringResource(R.string.settings_glass_tint_blue),
+            `in`.melo.ui.glass.MeloGlassTint.PURPLE.key to stringResource(R.string.settings_glass_tint_purple),
+            `in`.melo.ui.glass.MeloGlassTint.PINK.key to stringResource(R.string.settings_glass_tint_pink),
+            `in`.melo.ui.glass.MeloGlassTint.ORANGE.key to stringResource(R.string.settings_glass_tint_orange),
+            `in`.melo.ui.glass.MeloGlassTint.GREEN.key to stringResource(R.string.settings_glass_tint_green),
+        ),
+        selectedKey = s.glassTint,
+        onSelectionChanged = { key -> change { copy(glassTint = key) } },
+        leadingIcon = { Icon(MeloIcons.Palette, null, tint = MaterialTheme.colorScheme.secondary) },
+    )
+    var darkness by remember(s.glassTintDarkness) { mutableFloatStateOf(s.glassTintDarkness) }
+    SliderSettingsItem(
+        label = stringResource(R.string.settings_glass_tint_darkness),
+        value = darkness, valueRange = 0f..1f, steps = 0,
+        onValueChange = { darkness = it },
+        onValueChangeFinished = { change { copy(glassTintDarkness = darkness) } },
+        valueText = { "${(it * 100).roundToInt()}%" },
+    )
 }

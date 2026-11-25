@@ -1,10 +1,8 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.MeloIcons
 import `in`.melo.ui.theme.MeloLayout
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DownloadForOffline
-import androidx.compose.material.icons.rounded.DownloadForOffline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -30,7 +28,7 @@ fun CollectionDownloadButton(ui: PlayerViewModel, item: Music) {
             containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
         ) else IconButtonDefaults.filledTonalIconButtonColors(),
     ) {
-        Icon(if (complete) Icons.Rounded.DownloadForOffline else Icons.Outlined.DownloadForOffline,
+        Icon(if (complete) MeloIcons.Downloaded else MeloIcons.DownloadForOffline,
             stringResource(if (complete) R.string.download_remove else if (requested) R.string.download_cancel else R.string.download_action))
     }
 }

@@ -12,32 +12,6 @@ import org.junit.Test
 
 /** Doubles for the fixes and features of the November 2026 reports. */
 class ReportedIssuesTest {
-    private val playlist = Music("spotify:playlist:0000000000000000000001", "Old name", "", MusicKind.Playlist)
-
-    @Test
-    fun nativePlaylistPageKeepsOrderLocalFilesAndLength() {
-        val response = Proto(proto {
-            writeByteArray(1, proto { writeInt32(1, 200) })
-            writeByteArray(2, proto {
-                writeByteArray(1, proto { writeString(7, "row1"); writeString(18, "spotify:track:0000000000000000000002") })
-                writeByteArray(1, proto { writeString(7, "row2"); writeString(18, "spotify:local:Artist:Album:Title:200") })
-                writeByteArray(1, proto { writeString(7, "row3"); writeString(18, "spotify:episode:0000000000000000000003") })
-                writeByteArray(2, proto { writeByteArray(1, proto {
-                    writeString(1, playlist.id); writeString(2, "Mix"); writeInt32(6, 354); writeString(7, "Description")
-                    writeByteArray(8, proto { writeString(1, "spotify:image:" + "ab".repeat(20)) })
-                }) })
-            })
-        })
-        val page = decodeNativePlaylistPage(response, playlist, from = 100)
-        assertEquals("Mix", page.item.title)
-        assertEquals(354, page.total)
-        assertEquals(3, page.rawCount)
-        assertEquals(listOf("spotify:track:0000000000000000000002", "spotify:local:Artist:Album:Title:200"), page.entries)
-        assertEquals(listOf("spotify:track:0000000000000000000002"), page.uris)
-        assertTrue(page.hasMore)
-        assertEquals("https://i.scdn.co/image/" + "ab".repeat(20), page.item.imageUrl)
-    }
-
     @Test
     fun onlyRequestRefusalsTryAnotherPlaylistReader() {
         assertTrue(playlistFallbackApplies(SpotifyFailure("Spotify playlist: HTTP response 400.", 400)))

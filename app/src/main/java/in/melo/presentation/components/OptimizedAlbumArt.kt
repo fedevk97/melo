@@ -1,5 +1,6 @@
 package `in`.melo.presentation.components
 
+import `in`.melo.presentation.icons.meloPainter
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.Image
@@ -22,7 +23,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import coil.annotation.ExperimentalCoilApi
 import coil.compose.SubcomposeAsyncImage
@@ -163,7 +163,7 @@ private fun PlaceholderContent(title: String) {
         contentAlignment = Alignment.Center
     ) {
         Image(
-            painter = painterResource(R.drawable.ic_music_placeholder),
+            painter = meloPainter(R.drawable.ic_music_placeholder),
             contentDescription = "$title placeholder",
             contentScale = ContentScale.Fit,
             modifier = Modifier.size(96.dp),
@@ -305,7 +305,7 @@ internal fun albumArtMemoryCacheKey(model: Any?, targetSize: Size): String? {
 //            is AsyncImagePainter.State.Loading,
 //            is AsyncImagePainter.State.Empty -> { // Show static placeholder for Loading and Empty states
 //                Image(
-//                    painter = painterResource(id = R.drawable.ic_music_placeholder),
+//                    painter = meloPainter(id = R.drawable.ic_music_placeholder),
 //                    contentDescription = "$title placeholder", // Adjusted content description
 //                    contentScale = ContentScale.Crop,
 //                    modifier = Modifier.fillMaxSize(),
@@ -316,7 +316,7 @@ internal fun albumArtMemoryCacheKey(model: Any?, targetSize: Size): String? {
 //                Timber.tag("OptimizedAlbumArt")
 //                    .e(currentState.result.throwable, "Displaying error placeholder for URI: $uri")
 //                Image(
-//                    painter = painterResource(id = R.drawable.rounded_broken_image_24),
+//                    painter = meloPainter(id = R.drawable.rounded_broken_image_24),
 //                    contentDescription = "Error loading album art for $title",
 //                    contentScale = ContentScale.Crop,
 //                    modifier = Modifier.fillMaxSize()

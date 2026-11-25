@@ -36,7 +36,7 @@ fun audioQualityLabel(mimeType: String?, sampleRateHz: Int?, bitrateBps: Int?): 
     bitrateBps?.takeIf { it > 0 }?.let { "${it / 1000} kbps" },
 ).joinToString(" · ")
 
-private fun audioFormatName(subtype: String): String = when (subtype.lowercase()) {
+internal fun audioFormatName(subtype: String): String = when (subtype.lowercase()) {
     "mpeg", "mp3" -> "MP3"
     "mp4a-latm", "aac", "mp4" -> "AAC"
     "x-flac", "flac" -> "FLAC"

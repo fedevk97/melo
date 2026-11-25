@@ -1,6 +1,8 @@
 package `in`.melo.presentation.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -22,6 +24,12 @@ import `in`.melo.data.preferences.CarouselStyle
 import `in`.melo.presentation.components.scoped.PrefetchAlbumNeighbors
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import `in`.melo.presentation.utils.LocalReducedMotion
 
 import `in`.melo.data.preferences.AlbumArtQuality
 
@@ -49,7 +57,12 @@ fun AlbumCarouselSection(
     modifier: Modifier = Modifier,
     carouselStyle: String = CarouselStyle.NO_PEEK,
     itemSpacing: Dp = 8.dp,
-    albumArtQuality: AlbumArtQuality = AlbumArtQuality.MEDIUM
+    albumArtQuality: AlbumArtQuality = AlbumArtQuality.MEDIUM,
+    itemCornerRadius: Dp = 18.dp,
+    /** A change of track the listener didn't swipe to dissolves the next cover in, instead of sliding. */
+    coverMix: Boolean = false,
+    /** Each cover fills the carousel's height, cropped, rather than staying square. */
+    fillHeight: Boolean = false,
 ) {
     if (queue.isEmpty()) return
 
@@ -110,6 +123,14 @@ fun AlbumCarouselSection(
         anchorIndex = effectiveTargetIndex
     )
     var programmaticScrollInProgress by remember { mutableStateOf(false) }
+    // The cover being mixed in over the current page, and how far it has come.
+    val mixScope = rememberCoroutineScope()
+    var mixJob by remember { mutableStateOf<Job?>(null) }
+    var mixTarget by remember { mutableStateOf<Int?>(null) }
+    var mixQueue by remember { mutableStateOf<ImmutableList<Song>?>(null) }
+    var mixPattern by remember { mutableLongStateOf(0L) }
+    val mixProgress = remember { Animatable(0f) }
+    val reducedMotion = LocalReducedMotion.current
     var lastSettledSongId by remember { mutableStateOf(currentSong?.id) }
 
     // Track whether the *user* is actively dragging the carousel (via the pager's interaction
@@ -138,7 +159,16 @@ fun AlbumCarouselSection(
         if (isUserDragging) {
             snapshotFlow { isUserDragging }.first { !it }
         }
-        
+        mixJob?.takeIf { it.isActive }?.let { running ->
+            // The skip that started a mix and the player catching up with it ask for the same cover.
+            if (mixTarget == effectiveTargetIndex && mixQueue === queue) {
+                lastSettledSongId = currentSong?.id
+                return@LaunchedEffect
+            }
+            // Another skip mid-mix: the half-mixed cover settles first, then the next one mixes in over it.
+            running.cancelAndJoin()
+        }
+
         val currentPage = carouselState.pagerState.currentPage
         if (currentPage != effectiveTargetIndex) {
             val isShiftOnly = currentSong?.id != null && 
@@ -149,6 +179,22 @@ fun AlbumCarouselSection(
                 // Same song moved to a new index: scroll instantly to maintain focus
                 // and avoid showing the wrong item for the duration of an animation.
                 carouselState.pagerState.scrollToPage(effectiveTargetIndex)
+            } else if (coverMix && queue.getOrNull(effectiveTargetIndex) != null) {
+                val target = effectiveTargetIndex
+                mixTarget = target
+                mixQueue = queue
+                mixPattern += 1
+                mixProgress.snapTo(0f)
+                mixJob = mixScope.launch {
+                    try {
+                        mixProgress.animateTo(1f, tween(CoverMixTiming.DURATION_MS, easing = LinearEasing))
+                    } finally {
+                        // The page under the mixed-in cover becomes it, so dropping the cover shows no seam.
+                        withContext(NonCancellable) { carouselState.pagerState.scrollToPage(target) }
+                        mixTarget = null
+                        mixQueue = null
+                    }
+                }
             } else {
                 programmaticScrollInProgress = true
                 try {
@@ -182,7 +228,7 @@ fun AlbumCarouselSection(
             }
     }
 
-    val corner = 18.dp//lerp(36.dp, 15.dp, expansionFraction.coerceIn(0f, 1f))
+    val corner = itemCornerRadius
 
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = this.maxWidth
@@ -202,7 +248,7 @@ fun AlbumCarouselSection(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .aspectRatio(1f)
+                        .then(if (fillHeight) Modifier else Modifier.aspectRatio(1f))
                         .clickable(
                             enabled = isFocusedItem && song.albumId != -1L,
                             interactionSource = remember { MutableInteractionSource() },
@@ -219,6 +265,24 @@ fun AlbumCarouselSection(
                              "${song.albumArtUriString}?quality=thumb"
                         } else null
                     )
+                    val incoming = mixTarget?.takeIf { it != index && isFocusedItem && mixQueue === queue }
+                        ?.let { queue.getOrNull(it) }
+                    if (incoming != null) {
+                        key(mixPattern) {
+                            OptimizedAlbumArt(
+                                uri = incoming.albumArtUriString,
+                                title = incoming.title,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .coverMixReveal(
+                                        revealed = { CoverMixTiming.reveal(mixProgress.value) },
+                                        pattern = mixPattern,
+                                        reducedMotion = reducedMotion,
+                                    ),
+                                targetSize = targetSize,
+                            )
+                        }
+                    }
                 }
             }
         )

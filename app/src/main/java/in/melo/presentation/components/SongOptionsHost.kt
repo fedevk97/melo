@@ -21,6 +21,7 @@ fun SongOptionsHost(
     context: List<Song>,
     queueName: String,
     onRemoveFromPlaylist: (() -> Unit)? = null,
+    onRemoveFromDial: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val song = selected ?: return
@@ -42,22 +43,30 @@ fun SongOptionsHost(
         onNavigateToArtist = { onDismiss(); ui.openArtistOf(song) },
         onStartRadio = { onDismiss(); ui.startRadio(song.toMusic()) { navController.openMusic(ui, it) } },
         onRemoveFromPlaylist = onRemoveFromPlaylist,
+        onRemoveFromDial = onRemoveFromDial,
     )
 }
 
 /** The long-press menu of any library element: a track menu, or its album/artist/playlist menu. */
 @Composable
-fun MusicOptionsHost(ui: PlayerViewModel, navController: NavController, selected: Music?, onDismiss: () -> Unit) {
+fun MusicOptionsHost(
+    ui: PlayerViewModel,
+    navController: NavController,
+    selected: Music?,
+    onRemoveFromDial: (() -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
     val item = selected ?: return
     if (item.kind == MusicKind.Track) {
         val song = item.toSong()
-        SongOptionsHost(ui, navController, song, listOf(song), item.title, null, onDismiss)
+        SongOptionsHost(ui, navController, song, listOf(song), item.title, null, onRemoveFromDial, onDismiss)
     } else {
         EntityOptionsSheet(
             item = item,
             playerViewModel = ui,
             onOpen = { navController.openMusic(ui, item) },
             onStartRadio = { onDismiss(); ui.startRadio(item) { navController.openMusic(ui, it) } },
+            onRemoveFromDial = onRemoveFromDial,
             onDismiss = onDismiss,
         )
     }

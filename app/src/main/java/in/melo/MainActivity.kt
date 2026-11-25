@@ -39,10 +39,54 @@ class MainActivity : ComponentActivity() {
         `in`.melo.update.AppUpdater.get(this).check()
     }
 
+    /**
+     * Android 12 and up: keeps the system splash up until the M has risen
+     * (drawable/splash_logo), then opens it into the app with [MeloLaunchIris]. With
+     * animations off it fades, at once. Held by holding back the
+     * first frame. A rotation or a restored activity has nothing to wait for.
+     */
+    private fun holdSplashForMark(savedInstanceState: Bundle?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            // Android 8 to 11: the starting window was the M on black (drawable/
+            // launch_background). Plain black again once the app draws, so it never shows through.
+            window.decorView.post {
+                window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0xFF0B0B0B.toInt()))
+            }
+            return
+        }
+        val animate = android.animation.ValueAnimator.areAnimatorsEnabled()
+        splashScreen.setOnExitAnimationListener { view ->
+            val decor = window.decorView as? android.view.ViewGroup
+            if (decor == null || !animate) {
+                view.animate()
+                    .alpha(0f)
+                    .setDuration(`in`.melo.ui.launch.LaunchSplash.EXIT_FADE_MS)
+                    .withEndAction { view.remove() }
+                    .start()
+            } else {
+                `in`.melo.ui.launch.MeloLaunchIris(this).runOver(decor, view.iconView) { view.remove() }
+            }
+        }
+        if (savedInstanceState != null || !animate) return
+        val createdAt = android.os.SystemClock.uptimeMillis()
+        val content = findViewById<android.view.View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(
+            object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    val held = android.os.SystemClock.uptimeMillis() - createdAt
+                    if (held < `in`.melo.ui.launch.LaunchSplash.ANIMATION_MS) return false
+                    content.viewTreeObserver.removeOnPreDrawListener(this)
+                    return true
+                }
+            },
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingSharedLink.value = sharedSpotifyLink(intent)
         enableEdgeToEdge()
+        holdSplashForMark(savedInstanceState)
         setContent {
             val model: MeloModel = viewModel()
             val sharedLink by pendingSharedLink.collectAsStateWithLifecycle()
@@ -101,6 +145,14 @@ class MainActivity : ComponentActivity() {
                     `in`.melo.presentation.components.LocalCompactLists provides settings.compactLists,
                     `in`.melo.presentation.components.LocalSourceBadges provides settings.showSourceBadges,
                     `in`.melo.presentation.components.LocalTrackSwipe provides swipe,
+                    `in`.melo.ui.glass.LocalMeloSurface provides `in`.melo.ui.glass.MeloSurfaceOptions(
+                        style = `in`.melo.ui.glass.MeloSurfaceStyle.of(settings.surfaceStyle),
+                        transparency = settings.glassTransparency,
+                        blur = settings.glassBlur,
+                        saturation = settings.glassSaturation,
+                        tint = `in`.melo.ui.glass.MeloGlassTint.of(settings.glassTint),
+                        darkness = settings.glassTintDarkness,
+                    ),
                 ) {
                     MeloMain(model, sharedLink) { pendingSharedLink.value = null }
                     `in`.melo.update.UpdatePrompt()

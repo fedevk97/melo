@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FF05060A</color>
+    <color name="ic_launcher_ice_background">#FF010410</color>
+    <color name="ic_launcher_amethyst_background">#FF030309</color>
+    <color name="ic_launcher_emerald_background">#FFFEF8EF</color>
+    <color name="ic_launcher_mono_background">#FF000000</color>
+</resources>

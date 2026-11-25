@@ -12,7 +12,10 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven("https://jitpack.io") {
-            content { includeGroup("com.github.racra") }
+            content {
+                includeGroup("com.github.racra")
+                includeGroup("com.github.cosmictaserdev-creator.Jetpack_SF_Symbols")
+            }
         }
     }
 }
