@@ -5,12 +5,11 @@ import android.os.Bundle
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 
-/** Controls Firebase Analytics and Melo's live-playback presence with one privacy setting. */
+/** Controls Firebase Analytics with the privacy setting. The live count of open apps is separate. */
 object UsageAnalytics {
     fun setEnabled(context: Context, enabled: Boolean) {
         val application = context.applicationContext
         analytics(application)?.setAnalyticsCollectionEnabled(enabled)
-        MeloTelemetry.setEnabled(enabled)
     }
 
     fun playbackStarted(context: Context, catalog: String) = log(context, "melo_playback_start") {

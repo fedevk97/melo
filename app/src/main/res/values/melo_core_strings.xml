@@ -504,7 +504,7 @@
     <string name="settings_discord_title">Join the Melo Discord</string>
     <string name="settings_discord_subtitle">Talk with the community and get release updates.</string>
     <string name="settings_analytics_title">Share usage analytics</string>
-    <string name="settings_analytics_subtitle">Shares playback starts, elapsed time while the player reports playing, buffering and playback errors with Firebase Analytics, plus an active-playback heartbeat with Melo\'s API. No track titles, artists, track IDs, searches or account details are sent. You can change this anytime.</string>
+    <string name="settings_analytics_subtitle">Shares playback starts, elapsed time while the player reports playing, buffering and playback errors with Firebase Analytics. No track titles, artists, track IDs, searches or account details are sent. You can change this anytime. Separately, Melo always tells its server while the app is open or playing, with only a random ID, for the public count of listeners.</string>
     <string name="privacy_policy_link">Privacy policy</string>
     <string name="home_gradients_setting">Artwork gradients</string>
     <string name="home_gradients_setting_subtitle">Add soft gradients to mood artwork and recommendation cards on Home.</string>

@@ -296,7 +296,7 @@ internal fun DiscordSettings(model: MeloModel, navController: NavHostController)
             ) }
         }
 
-        if (connected) SettingsDestructiveRow(stringResource(R.string.discord_disconnect)) { store.clear() }
+        if (connected) SettingsDestructiveRow(stringResource(R.string.discord_disconnect)) { store.clear(); forgetDiscordWebSession() }
     }
 
     when (dialog) {

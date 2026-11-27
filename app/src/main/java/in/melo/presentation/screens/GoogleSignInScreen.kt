@@ -33,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -171,6 +172,7 @@ fun GoogleSignInScreen(model: MeloModel, navController: NavHostController) {
         },
     ) { inner ->
         val hasSong by model.ui.derivedHasSong.collectAsStateWithLifecycle()
+        val pageColor = MaterialTheme.colorScheme.background.toArgb()
         Box(Modifier.padding(inner).padding(bottom = if (hasSong) `in`.melo.presentation.components.MiniPlayerHeight else 0.dp).fillMaxSize()) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -183,8 +185,9 @@ fun GoogleSignInScreen(model: MeloModel, navController: NavHostController) {
                         // Shown once the first page has painted: until then a WebView is a blank
                         // white sheet, which flashes against the dark page behind it.
                         visibility = android.view.View.INVISIBLE
-                        // An unstyled first frame then shows the page behind it, not white.
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        // Opaque, in the page's own colour: an unstyled first frame is not white, and
+                        // nothing behind the WebView has to be drawn through it.
+                        setBackgroundColor(pageColor)
                         webViewClient = object : WebViewClient() {
                             override fun onPageCommitVisible(view: WebView, url: String?) {
                                 if (view.visibility == android.view.View.INVISIBLE) view.visibility = android.view.View.VISIBLE

@@ -137,6 +137,8 @@ internal class LosslessUpgrader(
     private val refused = mutableSetOf<String>()
     /** Copies proved and then not used because the queue moved on, kept for a return. */
     private val shelved = mutableMapOf<String, ResolvedStream>()
+    /** How often each switched copy has been opened again after a dropped connection, this play. */
+    private val reopened = mutableMapOf<String, Int>()
     private var collector: Job? = null
 
     fun start() {
@@ -144,6 +146,8 @@ internal class LosslessUpgrader(
         collector = scope.launch { LosslessUpgrade.requests.collect(::askedByHand) }
         scope.launch { settings.settings.collect { updateOffer(); consider() } }
         scope.launch { NetworkMonitor.online.collect { updateOffer(); if (it) consider() } }
+        // Moving between Wi-Fi and mobile data changes which quality applies, mid-track included.
+        scope.launch { NetworkMonitor.metered.collect { asked.clear(); updateOffer(); consider() } }
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -152,7 +156,7 @@ internal class LosslessUpgrader(
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED && id != null && id == jobFor) return
         // A fresh play of a track gets a fresh look; its switched copy belongs to the old play.
         if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED && id != null &&
-            !LosslessUpgrade.isMarked(mediaItem.localConfiguration?.uri)) asked -= id
+            !LosslessUpgrade.isMarked(mediaItem.localConfiguration?.uri)) { asked -= id; reopened -= id }
         if (id != jobFor) cancelJob()
         updateOffer()
         consider()
@@ -166,6 +170,22 @@ internal class LosslessUpgrader(
     override fun onPlayerError(error: PlaybackException) {
         val item = player.currentMediaItem ?: return
         if (!LosslessUpgrade.isMarked(item.localConfiguration?.uri)) return
+        // A dropped connection, such as a move from Wi-Fi to mobile data, says nothing against the copy:
+        // it is opened again where it stopped before giving way to YouTube Music.
+        val id = item.mediaId
+        val tries = reopened[id] ?: 0
+        if (NetworkMonitor.online.value && error.errorCode in DROPPED && tries < MAX_REOPENS) {
+            reopened[id] = tries + 1
+            val at = player.currentPosition
+            Log.w(TAG, "switched copy of $id lost its connection (${error.errorCodeName}); opening it again")
+            scope.launch {
+                delay(REOPEN_STEP_MS * (tries + 1))
+                if (player.currentMediaItem?.mediaId != id || player.playerError == null) return@launch
+                player.seekTo(at)
+                player.prepare()
+            }
+            return
+        }
         Log.w(TAG, "switched copy of ${item.mediaId} failed (${error.errorCodeName}); back to YouTube Music")
         revert(item, player.currentPosition)
     }
@@ -387,6 +407,14 @@ internal class LosslessUpgrader(
         const val AUDITION_MS = 25_000L
         const val PREBUFFER_MS = 12_000L
         const val PROVE_MS = 10_000L
+        const val MAX_REOPENS = 3
+        const val REOPEN_STEP_MS = 1_500L
+        val DROPPED = setOf(
+            PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+            PlaybackException.ERROR_CODE_TIMEOUT,
+        )
 
         fun isLosslessMime(mime: String) = mime == MimeTypes.AUDIO_FLAC || mime == MimeTypes.AUDIO_ALAC ||
             mime == MimeTypes.AUDIO_RAW || mime == MimeTypes.AUDIO_WAV

@@ -11,14 +11,17 @@ Spotify, YouTube Music and the music on your phone, in one native Android player
 
 [![Latest release](https://img.shields.io/github/v/release/aarush-io/melo?style=for-the-badge&label=release&color=8FE3BC&labelColor=0B0B0C)](https://github.com/aarush-io/melo/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/aarush-io/melo/total?style=for-the-badge&label=downloads&color=8FE3BC&labelColor=0B0B0C)](https://github.com/aarush-io/melo/releases)
+[![Listening now](https://api.melo.aarushsagar.com/api/stats/live/badge.svg)](https://api.melo.aarushsagar.com/api/stats/live)
 [![License](https://img.shields.io/badge/license-GPL--3.0-8FE3BC?style=for-the-badge&labelColor=0B0B0C)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-join_us-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=0B0B0C)](https://discord.gg/h3Hzk4seXj)
+
+<a href="https://trendshift.io/repositories/358544?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-358544" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/358544/daily?language=Kotlin" alt="aarush-io%2Fmelo | Trendshift" width="250" height="55"/></a>
 
 [**Download**](#download) · [**Screenshots**](#screenshots) · [**Features**](#features) · [**Support**](#support) · [**Credits**](#credits)
 
 <br />
 
-<img src="docs/assets/img/readme/melo-hero.png" width="100%" alt="Melo: Explore, Now Playing and the Speed Dial on Home" />
+<img src="docs/assets/img/readme/melo-hero.png" width="100%" alt="Melo: the artist dial, Now Playing and the Speed Dial on Home" />
 
 </div>
 
@@ -33,7 +36,7 @@ Spotify, YouTube Music and the music on your phone, in one native Android player
 
 <img src="docs/assets/img/readme/home.png" width="100%" alt="Home: the Speed Dial, the artist dial, Explore and Podcasts" />
 
-<img src="docs/assets/img/readme/library.png" width="100%" alt="Library and search: recent searches, the library and an artist page" />
+<img src="docs/assets/img/readme/library.png" width="100%" alt="Library and search: search results, the library and an artist page" />
 
 <img src="docs/assets/img/readme/player.png" width="100%" alt="Player: Now Playing with colours from the artwork, and the queue" />
 
@@ -96,7 +99,7 @@ Melo checks for new releases and walks you through updating. See [how updates wo
 
 ## Support
 
-Melo is free. If it has earned a place in your rotation, you can support it with a voluntary UPI contribution: scan with any UPI app and choose an amount.
+Melo is free and will always be. If it has earned a place in your rotation, you can support it with a voluntary UPI contribution: scan with any UPI app and choose an amount.
 
 <div align="center">
 <img src="docs/assets/img/readme/support-melo.svg" alt="UPI QR code for aarushhh@fam" width="300" />
@@ -114,11 +117,10 @@ Bug reports, device testing, documentation and code are all welcome. Start with 
 
 ## Credits
 
-- [BitChord](https://github.com/kushagrasinghx/BitChord) by kushagrasinghx: add-on support and add-on track matching are adapted from it.
-- [Dial](https://github.com/steeben/Dial) by steeben: several interface ideas, such as the dials on Home, follow its lead.
-- [Resona](https://github.com/code-saksham-hash/Resona): the YouTube Music integration.
-- [Kizzy](https://github.com/dead8309/Kizzy): the Discord presence gateway.
-- [Doto](https://github.com/google/fonts/tree/main/ofl/doto): the dot-matrix wordmark, under the [SIL Open Font License](design/Doto-OFL.txt).
+- BitChord and Dial — inspiration and adapted features.
+- [Resona](https://github.com/code-saksham-hash/Resona) — YouTube Music integration.
+- [Kizzy](https://github.com/dead8309/Kizzy) — Discord Rich Presence.
+- [Doto](https://github.com/google/fonts/tree/main/ofl/doto) — wordmark font (SIL Open Font License).
 
 ## Legal
 

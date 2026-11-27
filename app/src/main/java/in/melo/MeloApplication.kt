@@ -13,7 +13,7 @@ class MeloApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         val analyticsEnabled = SettingsStore.get(this).settings.value.analyticsEnabled
-        `in`.melo.data.MeloTelemetry.initialize(this, analyticsEnabled)
+        `in`.melo.data.MeloTelemetry.initialize(this)
         UsageAnalytics.setEnabled(this, analyticsEnabled)
         `in`.melo.data.diagnostics.DiagnosticLog.init(this)
         `in`.melo.data.diagnostics.DiagnosticLog.catchCrashes()

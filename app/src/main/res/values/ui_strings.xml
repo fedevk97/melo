@@ -497,7 +497,7 @@
     <string name="settings_glass_tint_darkness">Tint darkness</string>
     <string name="home_page_for_you">For You</string>
     <string name="onboarding_consent_title">Help make Melo better</string>
-    <string name="onboarding_consent_body">Share anonymous playback statistics through Firebase Analytics: when playback starts, how long it plays, buffering and errors, plus a heartbeat while music is playing. Never track titles, artists, searches or account details. You can change this any time in Settings › Privacy.</string>
+    <string name="onboarding_consent_body">Share anonymous playback statistics through Firebase Analytics: when playback starts, how long it plays, buffering and errors. Never track titles, artists, searches or account details. You can change this any time in Settings › Privacy.</string>
     <string name="onboarding_consent_agree">Agree and continue</string>
     <string name="onboarding_consent_decline">Not now</string>
     <string name="onboarding_welcome_title">Welcome to Melo</string>

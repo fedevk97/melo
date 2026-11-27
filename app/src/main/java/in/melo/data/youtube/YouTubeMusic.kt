@@ -4,6 +4,7 @@ package `in`.melo.data.youtube
 
 import android.content.Context
 import android.content.res.Resources
+import android.util.Log
 import androidx.core.content.edit
 import `in`.melo.data.Music
 import `in`.melo.data.MusicKind
@@ -290,6 +291,12 @@ object YouTubeMusic {
                 synchronized(this) { streams[memo] = resolved }
                 return resolved
             } catch (failure: Exception) { last = failure }
+        }
+        // This client's formats could not be unlocked (a changed player script, usually): the next
+        // client in the chain may hand back plain addresses instead.
+        if (clients.size > 1) {
+            Log.w("YouTubeMusic", "${client.clientName} formats unusable (${last?.javaClass?.simpleName}); trying the next client")
+            return stream(videoId, excluded + client.clientName, ceiling)
         }
         throw (last as? YouTubeFailure) ?: YouTubeFailure("No audio format could be opened.", "NO_AUDIO_FORMAT")
     }

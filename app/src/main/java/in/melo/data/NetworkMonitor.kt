@@ -18,6 +18,9 @@ import kotlinx.coroutines.launch
 internal object NetworkMonitor {
     private val mutable = MutableStateFlow(true)
     val online: StateFlow<Boolean> = mutable.asStateFlow()
+    private val mutableMetered = MutableStateFlow(false)
+    /** Whether the network in use is billed by the byte, such as mobile data; quality follows it. */
+    val metered: StateFlow<Boolean> = mutableMetered.asStateFlow()
     private val changeListeners = CopyOnWriteArraySet<() -> Unit>()
     private var started = false
     @Volatile private var connected = false
@@ -44,6 +47,7 @@ internal object NetworkMonitor {
         val manager = context.applicationContext.getSystemService(ConnectivityManager::class.java)
         connected = manager.getNetworkCapabilities(manager.activeNetwork)
             ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        mutableMetered.value = manager.isActiveNetworkMetered
         publish()
         manager.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             private var current: Network? = manager.activeNetwork
@@ -51,6 +55,8 @@ internal object NetworkMonitor {
                 val switched = current != network
                 current = network
                 connected = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                mutableMetered.value = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) &&
+                    !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_TEMPORARILY_NOT_METERED)
                 // Sockets of the previous network would otherwise stall the first requests of the new one.
                 publish(invalidate = switched)
             }

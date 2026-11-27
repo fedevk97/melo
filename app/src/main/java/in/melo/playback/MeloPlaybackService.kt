@@ -26,7 +26,6 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import `in`.melo.MainActivity
-import `in`.melo.data.MeloTelemetry
 import `in`.melo.data.MusicSource
 import `in`.melo.data.musicSourceOf
 import `in`.melo.data.UsageAnalytics
@@ -59,9 +58,9 @@ class MeloPlaybackService : MediaLibraryService() {
                 ProgressiveMediaSource.Factory(youtube.kept).setLoadErrorHandlingPolicy(ResilientLoadPolicy())))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_NETWORK).build()
-        fun updatePlaybackPresence() {
-            MeloTelemetry.setPlaybackActive(player.isPlaying)
-        }
+        // Buffering between tracks is still listening: count the intent to play, not only sound.
+        fun updateListening() = `in`.melo.data.MeloTelemetry.setPlaying(player.isPlaying ||
+            (player.playWhenReady && player.playbackState == androidx.media3.common.Player.STATE_BUFFERING))
         var lastTelemetryTrack: String? = null
         var bufferingStartedAt: Long? = null
         var listeningStartedAt: Long? = null
@@ -115,7 +114,7 @@ class MeloPlaybackService : MediaLibraryService() {
                 } else {
                     finishListeningSegment()
                 }
-                updatePlaybackPresence()
+                updateListening()
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == androidx.media3.common.Player.STATE_BUFFERING) {
@@ -123,7 +122,7 @@ class MeloPlaybackService : MediaLibraryService() {
                 } else {
                     finishBuffering()
                 }
-                updatePlaybackPresence()
+                updateListening()
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
                 finishBuffering()
@@ -149,7 +148,7 @@ class MeloPlaybackService : MediaLibraryService() {
                 }
                 UsageAnalytics.playbackError(this@MeloPlaybackService, telemetryCatalog(), errorCategory(error))
                 finishListeningSegment()
-                updatePlaybackPresence()
+                updateListening()
             }
         })
         effectsScope.launch {
@@ -257,7 +256,7 @@ class MeloPlaybackService : MediaLibraryService() {
         if (!keepPlaying || mediaSession?.player?.playWhenReady != true) stopSelf()
     }
     override fun onDestroy() {
-        MeloTelemetry.setPlaybackActive(false)
+        `in`.melo.data.MeloTelemetry.setPlaying(false)
         behavior?.close(); behavior = null
         preloader?.close(); preloader = null
         recovery?.close(); recovery = null

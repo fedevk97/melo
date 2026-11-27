@@ -1,0 +1,20 @@
+name = "melo-live"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+[vars]
+PRESENCE_INTERVAL_SEC = "300"
+PRESENCE_GRACE_SEC = "90"
+PRESENCE_MAX_ENTRIES = "200000"
+PRESENCE_PINGS_PER_MINUTE = "20"
+PRESENCE_RATE_LIMIT_MAX_IPS = "100000"
+ALLOWED_ORIGINS = ""
+
+[[durable_objects.bindings]]
+name = "LIVE"
+class_name = "LiveCounter"
+
+# SQLite-backed, which the Workers Free plan includes.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LiveCounter"]

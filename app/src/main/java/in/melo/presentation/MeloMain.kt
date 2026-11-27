@@ -242,7 +242,11 @@ fun MeloMain(model: MeloModel, pendingSharedLink: String? = null, onSharedLinkHa
     // its glass, not the pages the player covers. Nothing in this window samples it.
     val screenBackdrop = `in`.melo.ui.glass.backdrop.backdrops.rememberLayerBackdrop(onDraw = paintBackdrop)
     val surfaceStyle = `in`.melo.ui.glass.LocalMeloSurface.current.style
-    val recordBackdrop = surfaceStyle != `in`.melo.ui.glass.MeloSurfaceStyle.SOLID && `in`.melo.ui.glass.isGlassSupported()
+    // A sign-in page is a WebView: recorded into the glass layers, its surface is drawn twice and
+    // blinks every other frame. Nothing on those pages is glass, so the recording pauses there.
+    val onWebPage = currentRoute == Screen.GoogleSignIn.route || currentRoute == Screen.DiscordLogin.route
+    val recordBackdrop = surfaceStyle != `in`.melo.ui.glass.MeloSurfaceStyle.SOLID && `in`.melo.ui.glass.isGlassSupported() &&
+        !onWebPage
     // The colour background: soft blobs in the playing song's colour (the colour of the chosen
     // app icon with nothing playing, first launch included) behind every page, inside the layer the glass bars sample,
     // so the bars pick the colour up too. The selected tab takes the same colour.
@@ -270,7 +274,8 @@ fun MeloMain(model: MeloModel, pendingSharedLink: String? = null, onSharedLinkHa
         `in`.melo.presentation.components.rememberAmbientBlobs(
             primary = ambientPrimary,
             secondary = ambientSecondary,
-            animate = !`in`.melo.presentation.utils.LocalReducedMotion.current && appInForeground,
+            // Still behind a sign-in page: the WebView would otherwise redraw with every frame of the blobs.
+            animate = !`in`.melo.presentation.utils.LocalReducedMotion.current && appInForeground && !onWebPage,
             dark = ambientDark,
         )
     } else null

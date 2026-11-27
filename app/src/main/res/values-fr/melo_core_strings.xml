@@ -504,7 +504,7 @@
     <string name="settings_discord_subtitle">Échangez avec la communauté et recevez les nouveautés.</string>
     <string name="settings_privacy_subtitle">Statistiques de lecture anonymes</string>
     <string name="settings_analytics_title">Partager les données d’utilisation</string>
-    <string name="settings_analytics_subtitle">Partage les démarrages de lecture, le temps écoulé pendant que le lecteur indique une lecture active, la mise en mémoire tampon et les erreurs de lecture avec Firebase Analytics, ainsi qu’un signal de lecture active avec l’API de Melo. Aucun titre, artiste, identifiant de piste, texte de recherche ni détail de compte n’est envoyé. Vous pouvez modifier ce réglage à tout moment.</string>
+    <string name="settings_analytics_subtitle">Partage les démarrages de lecture, le temps écoulé pendant que le lecteur indique une lecture active, la mise en mémoire tampon et les erreurs de lecture avec Firebase Analytics. Aucun titre, artiste, identifiant de piste, texte de recherche ni détail de compte n’est envoyé. Vous pouvez modifier ce réglage à tout moment. Par ailleurs, Melo indique toujours à son serveur quand l’app est ouverte ou en lecture, avec un simple identifiant aléatoire, pour le décompte public des auditeurs.</string>
     <string name="privacy_policy_link">Politique de confidentialité</string>
     <string name="home_gradients_setting">Dégradés des illustrations</string>
     <string name="home_gradients_setting_subtitle">Ajoutez des dégradés subtils aux illustrations d’ambiance et aux cartes de recommandations de l’Accueil.</string>

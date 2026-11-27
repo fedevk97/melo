@@ -36,8 +36,8 @@ android {
         applicationId = providers.gradleProperty("meloTestApplicationId").getOrElse("in.melo")
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.3.0"
+        versionCode = 9
+        versionName = "1.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // A fork must never offer the upstream APK as an update.
         buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
@@ -75,6 +75,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
+    implementation("androidx.lifecycle:lifecycle-process:2.9.4")
     implementation("androidx.compose.material3:material3:1.5.0-beta02")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     // SF Symbols as Compose vectors, for the app's icons. Without its own

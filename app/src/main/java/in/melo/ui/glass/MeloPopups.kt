@@ -348,29 +348,16 @@ internal fun hungMenuTop(
 }
 
 /**
- * An alert in Melo's material, taking the same arguments as Material's
- * AlertDialog so it drops in where one was: centred title, the message, and the
- * buttons side by side under a hairline, each in its own half.
- *
- * [shape], [containerColor] and [tonalElevation] are accepted and ignored: the
- * card is always the popup panel.
+ * The frame every Melo alert sits in: the scrim, the blurred app behind, and the popup panel
+ * springing in at the centre, at most [maxWidth] wide. [content] fills the panel.
  */
 @Composable
-fun MeloAlertDialog(
+fun MeloDialogFrame(
     onDismissRequest: () -> Unit,
-    confirmButton: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    dismissButton: (@Composable () -> Unit)? = null,
-    icon: (@Composable () -> Unit)? = null,
-    title: (@Composable () -> Unit)? = null,
-    text: (@Composable () -> Unit)? = null,
-    @Suppress("UNUSED_PARAMETER") shape: Shape? = null,
-    @Suppress("UNUSED_PARAMETER") containerColor: Color = Color.Unspecified,
-    iconContentColor: Color = Color.Unspecified,
-    titleContentColor: Color = Color.Unspecified,
-    textContentColor: Color = Color.Unspecified,
-    @Suppress("UNUSED_PARAMETER") tonalElevation: Dp = 0.dp,
     properties: DialogProperties = DialogProperties(),
+    maxWidth: Dp = AlertMaxWidth,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.(colors: MeloMenuColors) -> Unit,
 ) {
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -408,7 +395,7 @@ fun MeloAlertDialog(
                 Column(
                     modifier
                         .pointerInput(Unit) {}
-                        .widthIn(max = AlertMaxWidth)
+                        .widthIn(max = maxWidth)
                         .fillMaxWidth()
                         .graphicsLayer {
                             val p = progress.value
@@ -419,65 +406,95 @@ fun MeloAlertDialog(
                         }
                         .meloPopupPanel(MeloAlertShape, frost, colors),
                 ) {
-                    Column(
-                        Modifier
-                            .weight(1f, fill = false)
-                            .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        if (icon != null) {
-                            CompositionLocalProvider(LocalContentColor provides iconContentColor.orElse(colors.label)) {
-                                Box(Modifier.padding(bottom = 12.dp)) { icon() }
-                            }
-                        }
-                        if (title != null) {
-                            CompositionLocalProvider(
-                                LocalContentColor provides titleContentColor.orElse(colors.label),
-                                LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(
-                                    fontSize = 17.sp,
-                                    lineHeight = 22.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Center,
-                                ),
-                            ) {
-                                Box(
-                                    Modifier.fillMaxWidth().padding(bottom = if (text != null) 8.dp else 0.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) { title() }
-                            }
-                        }
-                        if (text != null) {
-                            CompositionLocalProvider(
-                                LocalContentColor provides textContentColor.orElse(colors.secondaryLabel),
-                                LocalTextStyle provides MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, lineHeight = 20.sp),
-                            ) {
-                                Box(Modifier.weight(1f, fill = false).fillMaxWidth()) { text() }
-                            }
-                        }
-                    }
-                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.separator))
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if (dismissButton != null) {
-                            Box(
-                                Modifier.weight(1f).heightIn(min = 52.dp).padding(4.dp),
-                                contentAlignment = Alignment.Center,
-                            ) { dismissButton() }
-                        }
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .heightIn(min = 52.dp)
-                                .then(
-                                    if (dismissButton != null) Modifier.drawBehind {
-                                        drawLine(colors.separator, Offset(0f, 0f), Offset(0f, size.height), 0.5.dp.toPx())
-                                    } else Modifier,
-                                )
-                                .padding(4.dp),
-                            contentAlignment = Alignment.Center,
-                        ) { confirmButton() }
-                    }
+                    content(colors)
                 }
             }
+        }
+    }
+}
+
+/**
+ * An alert in Melo's material, taking the same arguments as Material's
+ * AlertDialog so it drops in where one was: centred title, the message, and the
+ * buttons side by side under a hairline, each in its own half.
+ *
+ * [shape], [containerColor] and [tonalElevation] are accepted and ignored: the
+ * card is always the popup panel.
+ */
+@Composable
+fun MeloAlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: (@Composable () -> Unit)? = null,
+    icon: (@Composable () -> Unit)? = null,
+    title: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null,
+    @Suppress("UNUSED_PARAMETER") shape: Shape? = null,
+    @Suppress("UNUSED_PARAMETER") containerColor: Color = Color.Unspecified,
+    iconContentColor: Color = Color.Unspecified,
+    titleContentColor: Color = Color.Unspecified,
+    textContentColor: Color = Color.Unspecified,
+    @Suppress("UNUSED_PARAMETER") tonalElevation: Dp = 0.dp,
+    properties: DialogProperties = DialogProperties(),
+) {
+    MeloDialogFrame(onDismissRequest, properties, AlertMaxWidth, modifier) { colors ->
+        Column(
+            Modifier
+                .weight(1f, fill = false)
+                .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (icon != null) {
+                CompositionLocalProvider(LocalContentColor provides iconContentColor.orElse(colors.label)) {
+                    Box(Modifier.padding(bottom = 12.dp)) { icon() }
+                }
+            }
+            if (title != null) {
+                CompositionLocalProvider(
+                    LocalContentColor provides titleContentColor.orElse(colors.label),
+                    LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 17.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                    ),
+                ) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(bottom = if (text != null) 8.dp else 0.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { title() }
+                }
+            }
+            if (text != null) {
+                CompositionLocalProvider(
+                    LocalContentColor provides textContentColor.orElse(colors.secondaryLabel),
+                    LocalTextStyle provides MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, lineHeight = 20.sp),
+                ) {
+                    Box(Modifier.weight(1f, fill = false).fillMaxWidth()) { text() }
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.separator))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (dismissButton != null) {
+                Box(
+                    Modifier.weight(1f).heightIn(min = 52.dp).padding(4.dp),
+                    contentAlignment = Alignment.Center,
+                ) { dismissButton() }
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 52.dp)
+                    .then(
+                        if (dismissButton != null) Modifier.drawBehind {
+                            drawLine(colors.separator, Offset(0f, 0f), Offset(0f, size.height), 0.5.dp.toPx())
+                        } else Modifier,
+                    )
+                    .padding(4.dp),
+                contentAlignment = Alignment.Center,
+            ) { confirmButton() }
         }
     }
 }

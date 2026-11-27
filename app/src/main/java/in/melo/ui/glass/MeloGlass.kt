@@ -197,6 +197,7 @@ fun Modifier.meloGlass(
         highlight = { Highlight.Default },
         shadow = { Shadow.Default },
         onDrawSurface = { drawRect(fill) },
+        exportedBackdrop = exportedBackdrop,
         backdropScale = RESOLUTION_SCALE,
     )
 }
