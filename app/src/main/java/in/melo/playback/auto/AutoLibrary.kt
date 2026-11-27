@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 @UnstableApi
 internal class AutoLibrary(context: Context) {
     private val app = context.applicationContext
+    private val account = AutoAccountLibrary(app)
 
     fun root(): MediaItem = folder(AutoIds.ROOT, app.getString(R.string.app_name))
 
@@ -51,9 +52,11 @@ internal class AutoLibrary(context: Context) {
     /** The tracks of a folder, in the order they are listed. Empty for a folder that has none. */
     suspend fun tracks(folderId: String): List<Music> = when {
         folderId == AutoIds.RECENT -> recent()
+        folderId == AutoIds.LIKED -> account.liked()
         folderId == AutoIds.LOCAL -> LocalLibrary(app).load()
         folderId == AutoIds.DOWNLOADED -> DownloadCenter.downloads.value.values.filter { it.isComplete }.map { it.track }
         AutoIds.searchQueryOf(folderId) != null -> search(AutoIds.searchQueryOf(folderId).orEmpty())
+        AutoIds.savedIdOf(folderId) != null -> account.tracksOf(AutoIds.savedIdOf(folderId).orEmpty())
         else -> AutoIds.playlistIdOf(folderId)?.let { playlistStore().get(it)?.tracks }.orEmpty()
     }
 
@@ -61,7 +64,8 @@ internal class AutoLibrary(context: Context) {
     suspend fun search(query: String): List<Music> {
         val store = playlistStore()
         val playlistTracks = store.playlists.value.flatMap { store.get(it.id)?.tracks.orEmpty() }
-        val pool = recent() + tracks(AutoIds.DOWNLOADED) + playlistTracks + LocalLibrary(app).load()
+        val savedTracks = account.collections().flatMap { account.tracksOf(it.id) }
+        val pool = recent() + account.liked() + tracks(AutoIds.DOWNLOADED) + playlistTracks + savedTracks + LocalLibrary(app).load()
         return pool.filter(Music::isPlayableTrack).distinctTracks().filter { matchesAutoSearch(it, query) }
     }
 
@@ -97,19 +101,30 @@ internal class AutoLibrary(context: Context) {
         return shuffle + playable.map { trackNode(folderId, it) }
     }
 
-    private fun playlistFolders(group: String?) = playlistStore().playlists.value.map {
-        folder(AutoIds.playlist(it.id), it.name, style = LIST, group = group)
+    /**
+     * Liked songs first, then the playlists and albums saved in the accounts, then the playlists
+     * made on this device: the same order as the app's Library.
+     */
+    private suspend fun playlistFolders(group: String?): List<MediaItem> {
+        val liked = if (account.liked().isNotEmpty()) listOf(folder(AutoIds.LIKED, app.getString(R.string.auto_liked), group = group)) else emptyList()
+        val saved = account.collections().map {
+            folder(AutoIds.saved(it.id), it.title, group = group, artwork = it.imageUrl, subtitle = it.subtitle)
+        }
+        val device = playlistStore().playlists.value.map { folder(AutoIds.playlist(it.id), it.name, group = group) }
+        return liked + saved + device
     }
 
     private fun playlistStore() = LocalPlaylistStore(app)
 
-    private fun folderTitle(id: String): String? = when {
+    private suspend fun folderTitle(id: String): String? = when {
         id == AutoIds.HOME -> app.getString(R.string.auto_home)
         id == AutoIds.LIBRARY -> app.getString(R.string.auto_library)
         id == AutoIds.DOWNLOADED -> app.getString(R.string.auto_downloaded)
+        id == AutoIds.LIKED -> app.getString(R.string.auto_liked)
         id == AutoIds.RECENT -> app.getString(R.string.auto_recent)
         id == AutoIds.PLAYLISTS -> app.getString(R.string.auto_playlists)
         id == AutoIds.LOCAL -> app.getString(R.string.auto_local)
+        AutoIds.savedIdOf(id) != null -> account.collections().firstOrNull { it.id == AutoIds.savedIdOf(id) }?.title
         else -> AutoIds.playlistIdOf(id)?.let { playlistStore().get(it)?.name }
     }
 
@@ -117,8 +132,11 @@ internal class AutoLibrary(context: Context) {
     private fun styleOf(id: String) = if (id == AutoIds.HOME) GRID else LIST
 
     /** [style] is how this folder's own children are drawn; [group] is the heading it sits under on Home. */
-    private fun folder(id: String, title: String, style: Int = LIST, group: String? = null) = MediaItem.Builder().setMediaId(id)
-        .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setIsBrowsable(true).setIsPlayable(false)
+    private fun folder(
+        id: String, title: String, style: Int = LIST, group: String? = null, artwork: String? = null, subtitle: String? = null,
+    ) = MediaItem.Builder().setMediaId(id)
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setSubtitle(subtitle?.ifBlank { null })
+            .setArtworkUri(largestSpotifyImage(artwork)?.let(Uri::parse)).setIsBrowsable(true).setIsPlayable(false)
             .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
             .setExtras(Bundle().apply {
                 putInt(BROWSABLE_STYLE, style)

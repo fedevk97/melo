@@ -7,6 +7,7 @@ import `in`.melo.playback.auto.AutoLimits
 import `in`.melo.playback.auto.autoPage
 import `in`.melo.playback.auto.distinctTracks
 import `in`.melo.playback.auto.matchesAutoSearch
+import `in`.melo.playback.auto.accountCollections
 import `in`.melo.playback.auto.shuffledAutoQueue
 import `in`.melo.playback.auto.resolveAutoQueue
 import org.junit.Assert.assertEquals
@@ -103,5 +104,23 @@ class AutoBrowseExtrasTest {
 
     @Test fun threeTabsAreOffered() {
         assertEquals(listOf(AutoIds.HOME, AutoIds.LIBRARY, AutoIds.DOWNLOADED), AutoIds.tabs)
+    }
+}
+
+class AutoAccountTest {
+    private fun item(id: String, kind: MusicKind) = Music(id, id, "", kind)
+
+    @Test fun savedPlaylistsComeFirstThenYouTubeThenAlbumsEachOnce() {
+        val spotify = listOf(item("spotify:collection:tracks", MusicKind.Playlist), item("spotify:playlist:a", MusicKind.Playlist))
+        val youTube = listOf(item("ytm:playlist:b", MusicKind.Playlist), item("spotify:playlist:a", MusicKind.Playlist))
+        val albums = listOf(item("spotify:album:c", MusicKind.Album), item("spotify:artist:d", MusicKind.Artist))
+        assertEquals(listOf("spotify:playlist:a", "ytm:playlist:b", "spotify:album:c"), accountCollections(spotify, youTube, albums).map { it.id })
+    }
+
+    @Test fun savedFoldersKeepTheirCollectionId() {
+        assertEquals("spotify:playlist:a", AutoIds.savedIdOf(AutoIds.saved("spotify:playlist:a")))
+        assertNull(AutoIds.savedIdOf(AutoIds.LIKED))
+        val node = AutoIds.track(AutoIds.saved("spotify:playlist:a"), "spotify:track:1")
+        assertEquals(AutoIds.saved("spotify:playlist:a") to "spotify:track:1", AutoIds.parseTrack(node))
     }
 }

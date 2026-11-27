@@ -16,6 +16,9 @@ internal object AutoIds {
     const val HOME = "auto:home"
     const val LIBRARY = "auto:library"
     const val DOWNLOADED = "auto:downloaded"
+    const val LIKED = "auto:liked"
+    /** A playlist or album saved in the Spotify or YouTube Music account. */
+    private const val SAVED = "auto:saved:"
     /** Stands for "play this folder in random order"; never a real track id. */
     const val SHUFFLE = "__shuffle__"
     private const val SEARCH = "auto:search:"
@@ -24,7 +27,10 @@ internal object AutoIds {
 
     /** The tabs Android Auto shows along the top, as in Spotify: Home, Library and Downloaded. */
     val tabs = listOf(HOME, LIBRARY, DOWNLOADED)
-    val libraryFolders = listOf(PLAYLISTS, RECENT, LOCAL)
+    val libraryFolders = listOf(LIKED, PLAYLISTS, RECENT, LOCAL)
+
+    fun saved(id: String) = SAVED + id
+    fun savedIdOf(folder: String): String? = folder.removePrefix(SAVED).takeIf { folder.startsWith(SAVED) && it.isNotEmpty() }
 
     fun search(query: String) = SEARCH + query
     fun searchQueryOf(folder: String): String? = folder.removePrefix(SEARCH).takeIf { folder.startsWith(SEARCH) && it.isNotBlank() }

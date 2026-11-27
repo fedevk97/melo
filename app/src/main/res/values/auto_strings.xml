@@ -3,6 +3,7 @@
     <string name="auto_home">Home</string>
     <string name="auto_library">Library</string>
     <string name="auto_downloaded">Downloaded</string>
+    <string name="auto_liked">Liked Songs</string>
     <string name="auto_shuffle">Shuffle play</string>
     <string name="auto_your_playlists">Your playlists</string>
     <string name="auto_recent">Recently played</string>
